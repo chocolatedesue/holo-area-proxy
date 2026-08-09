@@ -538,6 +538,14 @@ pub(crate) fn compute_spt(
     let lsdb = instance.state.lsdb.get(level);
     let metric_type = instance.config.metric_type.get(level);
     let mut used_adjs = BTreeSet::new();
+    // RFC 9666 §3.2: Inside routers MUST ignore the Proxy LSP in L2 SPF.
+    let proxy_sid = if instance.config.area_proxy.enabled
+        && level == LevelNumber::L2
+    {
+        instance.config.area_proxy.proxy_system_id
+    } else {
+        None
+    };
 
     // Get root vertex.
     let root_vid = VertexId::from(root_system_id);
@@ -553,6 +561,13 @@ pub(crate) fn compute_spt(
         // Add vertex to SPT.
         let vertex_idx = spt.insert(cand_v);
         let vertex = &spt.arena[vertex_idx];
+
+        // RFC 9666 §3.2: do not expand the Proxy LSP on Inside L2 SPF.
+        if let Some(proxy) = proxy_sid
+            && vertex.id.lan_id.system_id == proxy
+        {
+            continue;
+        }
 
         // Skip if the zeroth LSP is missing.
         let Some(zeroth_lsp) = zeroth_lsp(vertex.id.lan_id, lsdb, lsp_entries)
@@ -612,8 +627,20 @@ pub(crate) fn compute_spt(
             lsdb,
             lsp_entries,
         ) {
+            // RFC 9666 §3.2: Inside L2 SPF never walks into the Proxy node.
+            if let Some(proxy) = proxy_sid
+                && link.id.lan_id.system_id == proxy
+            {
+                continue;
+            }
+
             // Check if the LSPs are mutually linked.
-            if !vertex_edges(
+            //
+            // Area Proxy dual-view (RFC 9666 §4.4.4 / §5.1): Outside Edge LSPs
+            // list the Proxy System ID as their IS neighbor, while Inside Edge
+            // LSPs list the Outside real system-id. Treat that as bidirectional
+            // so Inside can install routes toward Outside prefixes.
+            let reverse_linked = vertex_edges(
                 &link.id,
                 mt_id,
                 metric_mode,
@@ -621,8 +648,14 @@ pub(crate) fn compute_spt(
                 lsdb,
                 lsp_entries,
             )
-            .any(|link| link.id == vertex.id)
-            {
+            .any(|rev| {
+                rev.id == vertex.id
+                    || proxy_sid.is_some_and(|proxy| {
+                        rev.id.lan_id.system_id == proxy
+                            && !rev.id.lan_id.is_pseudonode()
+                    })
+            });
+            if !reverse_linked {
                 continue;
             }
 
