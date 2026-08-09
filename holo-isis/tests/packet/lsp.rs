@@ -11,6 +11,7 @@ use std::sync::LazyLock as Lazy;
 
 use const_addrs::{ip4, ip6, net4, net6};
 use holo_isis::packet::iana::{AslaSabmFlags, FadFlags, FloodingAlgo};
+use holo_isis::packet::auth::AuthMethod;
 use holo_isis::packet::pdu::{Lsp, LspFlags, LspTlvs, Pdu};
 use holo_isis::packet::subtlvs::MsdStlv;
 use holo_isis::packet::subtlvs::capability::{
@@ -33,13 +34,14 @@ use holo_isis::packet::subtlvs::prefix::{
 };
 use holo_isis::packet::subtlvs::spb::{IsidEntry, IsidFlags, SpbmSiStlv};
 use holo_isis::packet::tlv::{
-    AreaAddressesTlv, DynamicHostnameTlv, Ipv4AddressesTlv, Ipv4Reach,
+    AreaAddressesTlv, AreaProxyTlv, DynamicHostnameTlv, Ipv4AddressesTlv, Ipv4Reach,
     Ipv4ReachStlvs, Ipv4ReachTlv, Ipv4RouterIdTlv, Ipv6AddressesTlv, Ipv6Reach,
     Ipv6ReachStlvs, Ipv6ReachTlv, Ipv6RouterIdTlv, IsReach, IsReachStlvs,
     IsReachTlv, LegacyIpv4Reach, LegacyIpv4ReachTlv, LegacyIsReach,
     LegacyIsReachTlv, LspBufferSizeTlv, MtCapStlvs, MtCapabilityTlv, MtFlags,
     MultiTopologyEntry, MultiTopologyTlv, ProtocolsSupportedTlv,
-    PurgeOriginatorIdTlv, RouterCapFlags, RouterCapStlvs, RouterCapTlv,
+    PurgeOriginatorIdTlv, RouterCapFlags,
+    RouterCapStlvs, RouterCapTlv,
 };
 use holo_isis::packet::{AreaAddr, LanId, LevelNumber, LspId, SystemId};
 use holo_utils::keychain::Key;
@@ -113,6 +115,7 @@ static LSP1: Lazy<(Vec<u8>, Option<&Key>, Pdu)> = Lazy::new(|| {
                     list: vec![0xcc],
                 }),
                 mt_cap: vec![],
+                area_proxy: None,
                 router_cap: vec![RouterCapTlv {
                     router_id: Some(ip4!("1.1.1.1")),
                     flags: RouterCapFlags::empty(),
@@ -392,6 +395,7 @@ static LSP2: Lazy<(Vec<u8>, Option<&Key>, Pdu)> = Lazy::new(|| {
                     list: vec![0xcc],
                 }),
                 mt_cap: vec![],
+                area_proxy: None,
                 router_cap: vec![],
                 area_addrs: vec![AreaAddressesTlv {
                     list: vec![AreaAddr::from([0x49, 0, 0].as_slice())],
@@ -522,6 +526,7 @@ static LSP3_HMAC_MD5: Lazy<(Vec<u8>, Option<&Key>, Pdu)> = Lazy::new(|| {
                     list: vec![0xcc],
                 }),
                 mt_cap: vec![],
+                area_proxy: None,
                 router_cap: vec![],
                 area_addrs: vec![AreaAddressesTlv {
                     list: vec![AreaAddr::from([0x49, 0, 0].as_slice())],
@@ -605,6 +610,7 @@ static LSP3_HMAC_SHA256: Lazy<(Vec<u8>, Option<&Key>, Pdu)> = Lazy::new(|| {
                     list: vec![0xcc],
                 }),
                 mt_cap: vec![],
+                area_proxy: None,
                 router_cap: vec![],
                 area_addrs: vec![AreaAddressesTlv {
                     list: vec![AreaAddr::from([0x49, 0, 0].as_slice())],
@@ -691,6 +697,7 @@ static LSP4: Lazy<(Vec<u8>, Option<&Key>, Pdu)> = Lazy::new(|| {
                     list: vec![0xcc, 0x8e],
                 }),
                 mt_cap: vec![],
+                area_proxy: None,
                 router_cap: vec![],
                 area_addrs: vec![AreaAddressesTlv {
                     list: vec![AreaAddr::from([0x49, 0, 0].as_slice())],
@@ -806,6 +813,7 @@ static LSP5: Lazy<(Vec<u8>, Option<&Key>, Pdu)> = Lazy::new(|| {
                 auth: None,
                 protocols_supported: None,
                 mt_cap: vec![],
+                area_proxy: None,
                 router_cap: vec![],
                 area_addrs: vec![],
                 multi_topology: vec![],
@@ -909,6 +917,7 @@ static LSP6_MT_CAP: Lazy<(Vec<u8>, Option<&Key>, Pdu)> = Lazy::new(|| {
                     },
                 }],
                 router_cap: vec![],
+                area_proxy: None,
                 area_addrs: vec![AreaAddressesTlv {
                     list: vec![AreaAddr::from([0x49, 0, 0].as_slice())],
                 }],
@@ -1027,8 +1036,6 @@ fn test_decode_lsp6_mt_cap() {
 #[test]
 fn test_decode_lsp_crypto_auth_short_digest() {
     use bytes::Bytes;
-    use holo_isis::packet::auth::AuthMethod;
-
     // Craft an LSP PDU whose Cryptographic Authentication TLV is the last
     // TLV in the PDU and declares a length that leaves no room for the
     // expected HMAC-SHA256 digest.
@@ -1074,4 +1081,141 @@ fn test_decode_lsp_short_pdu_length() {
 
     let result = Pdu::decode(&mut Bytes::from(bytes), None, None);
     assert!(result.is_err());
+}
+
+static LSP_AREA_PROXY: Lazy<(Vec<u8>, Option<&Key>, Pdu)> = Lazy::new(|| {
+    let pdu = Pdu::Lsp(Lsp::new(
+        LevelNumber::L2,
+        1170,
+        LspId::from([0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00]),
+        0x0000000a,
+        LspFlags::IS_TYPE2 | LspFlags::IS_TYPE1,
+        LspTlvs {
+            auth: None,
+            protocols_supported: Some(ProtocolsSupportedTlv {
+                list: vec![0xcc],
+            }),
+            router_cap: vec![],
+            mt_cap: vec![],
+            area_proxy: Some(AreaProxyTlv::with_proxy_system_id(Some(
+                SystemId::from([0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff]),
+            ))),
+            area_addrs: vec![AreaAddressesTlv {
+                list: vec![AreaAddr::from([0x49, 0, 1].as_slice())],
+            }],
+            multi_topology: vec![],
+            purge_originator_id: None,
+            hostname: None,
+            lsp_buf_size: None,
+            is_reach: vec![],
+            ext_is_reach: vec![],
+            mt_is_reach: vec![],
+            ipv4_addrs: vec![],
+            ipv4_internal_reach: vec![],
+            ipv4_external_reach: vec![],
+            ext_ipv4_reach: vec![],
+            mt_ipv4_reach: vec![],
+            ipv4_router_id: None,
+            ipv6_addrs: vec![],
+            ipv6_reach: vec![],
+            mt_ipv6_reach: vec![],
+            ipv6_router_id: None,
+            unknown: vec![],
+        },
+        None,
+    ));
+    // Golden bytes are taken from the encoder itself for the initial fixture.
+    let bytes = pdu.clone().encode(None).to_vec();
+    (bytes, None, pdu)
+});
+
+static LSP_AREA_PROXY_EMPTY: Lazy<(Vec<u8>, Option<&Key>, Pdu)> = Lazy::new(|| {
+    let pdu = Pdu::Lsp(Lsp::new(
+        LevelNumber::L2,
+        1170,
+        LspId::from([0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00]),
+        0x0000000b,
+        LspFlags::IS_TYPE2 | LspFlags::IS_TYPE1,
+        LspTlvs {
+            auth: None,
+            protocols_supported: Some(ProtocolsSupportedTlv {
+                list: vec![0xcc],
+            }),
+            router_cap: vec![],
+            mt_cap: vec![],
+            area_proxy: Some(AreaProxyTlv::default()),
+            area_addrs: vec![],
+            multi_topology: vec![],
+            purge_originator_id: None,
+            hostname: None,
+            lsp_buf_size: None,
+            is_reach: vec![],
+            ext_is_reach: vec![],
+            mt_is_reach: vec![],
+            ipv4_addrs: vec![],
+            ipv4_internal_reach: vec![],
+            ipv4_external_reach: vec![],
+            ext_ipv4_reach: vec![],
+            mt_ipv4_reach: vec![],
+            ipv4_router_id: None,
+            ipv6_addrs: vec![],
+            ipv6_reach: vec![],
+            mt_ipv6_reach: vec![],
+            ipv6_router_id: None,
+            unknown: vec![],
+        },
+        None,
+    ));
+    let bytes = pdu.clone().encode(None).to_vec();
+    (bytes, None, pdu)
+});
+
+#[test]
+fn test_encode_lsp_area_proxy() {
+    let (ref bytes, ref auth, ref lsp) = *LSP_AREA_PROXY;
+    test_encode_pdu(bytes, lsp, auth);
+}
+
+#[test]
+fn test_decode_lsp_area_proxy() {
+    let (ref bytes, ref auth, ref lsp) = *LSP_AREA_PROXY;
+    test_decode_pdu(bytes, lsp, auth);
+}
+
+#[test]
+fn test_encode_lsp_area_proxy_empty() {
+    let (ref bytes, ref auth, ref lsp) = *LSP_AREA_PROXY_EMPTY;
+    test_encode_pdu(bytes, lsp, auth);
+}
+
+#[test]
+fn test_decode_lsp_area_proxy_empty() {
+    let (ref bytes, ref auth, ref lsp) = *LSP_AREA_PROXY_EMPTY;
+    test_decode_pdu(bytes, lsp, auth);
+}
+
+#[test]
+fn test_decode_lsp_area_proxy_ignored_on_l1() {
+    use bytes::Bytes;
+    // Build an L2 LSP with Area Proxy, then force L1 PDU type in the wire
+    // image so decode must ignore TLV 20 (RFC 9666).
+    let (ref bytes_l2, _, _) = *LSP_AREA_PROXY;
+    let mut bytes = bytes_l2.clone();
+    // PDU type is at offset 4 in the common header (0x14 = LspL2 -> 0x12 = LspL1).
+    assert_eq!(bytes[4], 0x14);
+    bytes[4] = 0x12;
+    // Zero checksum so decode does not fail authentication/checksum paths that
+    // may re-validate; Lsp decode still checks fletcher in some paths.
+    // Clear checksum bytes (offsets 24..26 in standard LSP layout after hdr).
+    // Common hdr 8 + pd 2 + lifetime 2 + lspid 8 + seq 4 = 24; cksum at 24.
+    bytes[24] = 0;
+    bytes[25] = 0;
+
+    let mut buf = Bytes::copy_from_slice(&bytes);
+    let mut pdu = Pdu::decode(&mut buf, None, None).unwrap();
+    if let Pdu::Lsp(lsp) = &mut pdu {
+        assert!(lsp.tlvs.area_proxy.is_none());
+    } else {
+        panic!("expected LSP");
+    }
 }

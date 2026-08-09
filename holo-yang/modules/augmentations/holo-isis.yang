@@ -86,6 +86,37 @@ module holo-isis {
        IS-IS Distributed Flooding Reduction";
   }
 
+  identity area-proxy-role {
+    description
+      "Base identity for RFC 9666 Area Proxy router roles.";
+    reference
+      "RFC 9666: Area Proxy for IS-IS";
+  }
+
+  identity area-proxy-role-leader {
+    base area-proxy-role;
+    description
+      "Area Leader: originates the Proxy LSP for the inside area.";
+  }
+
+  identity area-proxy-role-edge {
+    base area-proxy-role;
+    description
+      "Inside Edge Router: has outside-facing L2 interfaces.";
+  }
+
+  identity area-proxy-role-inside {
+    base area-proxy-role;
+    description
+      "Inside Router: participates in Area Proxy without outside links.";
+  }
+
+  identity area-proxy-role-static {
+    base area-proxy-role;
+    description
+      "Statically designated leader behavior (no RFC 9667 election).";
+  }
+
   /*
    * Types.
    */
@@ -181,6 +212,33 @@ module holo-isis {
           "When enabled, this level 1 router ignores the ATT bit in level
            1 LSPs it receives. As a result, it will not install a default
            route for any level 1/2 router that sets the ATT bit.";
+      }
+    }
+
+    container area-proxy {
+      description
+        "RFC 9666 Area Proxy for IS-IS configuration.";
+      reference
+        "RFC 9666: Area Proxy for IS-IS";
+      leaf enabled {
+        type boolean;
+        default false;
+        description
+          "Enables Area Proxy participation on this IS-IS instance.";
+      }
+      leaf role {
+        type identityref {
+          base area-proxy-role;
+        }
+        default holo-isis:area-proxy-role-inside;
+        description
+          "Area Proxy role for this router (leader, edge, inside, or static).";
+      }
+      leaf proxy-system-id {
+        type isis:system-id;
+        description
+          "Area Proxy System Identifier used as IIH source on outside-facing
+           interfaces and as the Proxy LSP system ID when acting as leader.";
       }
     }
 
@@ -335,6 +393,23 @@ module holo-isis {
          adjacency is brought to the 'up' state.
 
          This leaf is only applicable to point-to-point interfaces.";
+    }
+
+    leaf facing {
+      when "../../holo-isis:area-proxy/enabled = 'true'";
+      type enumeration {
+        enum inside {
+          description "Link toward the inside area.";
+        }
+        enum outside {
+          description
+            "Link toward outside; IIH source uses proxy-system-id when
+             acting as edge/leader/static.";
+        }
+      }
+      default inside;
+      description
+        "Area Proxy interface facing (RFC 9666 Inside Edge filtering).";
     }
 
     container trace-options {

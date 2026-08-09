@@ -28,6 +28,7 @@ use ipnetwork::{IpNetwork, Ipv4Network, Ipv6Network};
 use itertools::Itertools;
 use tokio::sync::mpsc::UnboundedSender;
 
+use crate::area_proxy;
 use crate::adjacency::{Adjacency, AdjacencyState};
 use crate::collections::{Arena, LspEntryId};
 use crate::debug::{Debug, LspPurgeReason};
@@ -364,7 +365,7 @@ fn lsp_build_tlvs(
         std::mem::swap(&mut ipv6_reach, &mut mt_ipv6_reach);
     }
 
-    LspTlvs::new(
+    let mut tlvs = LspTlvs::new(
         protocols_supported,
         router_cap,
         mt_cap,
@@ -385,7 +386,12 @@ fn lsp_build_tlvs(
         ipv6_reach.into_values(),
         mt_ipv6_reach.into_values(),
         instance.config.ipv6_router_id,
-    )
+    );
+    // RFC 9666: Area Proxy TLV only on L2 LSPs (fragment 0 via next_chunk).
+    if level == LevelNumber::L2 {
+        tlvs.area_proxy = area_proxy::build_local_area_proxy_tlv(instance.config);
+    }
+    tlvs
 }
 
 fn lsp_build_tlvs_pseudo(
@@ -429,7 +435,7 @@ fn lsp_build_tlvs_pseudo(
         }
     }
 
-    LspTlvs::new(
+    let mut tlvs = LspTlvs::new(
         [],
         [].into(),
         [].into(),
@@ -450,7 +456,11 @@ fn lsp_build_tlvs_pseudo(
         [],
         [],
         None,
-    )
+    );
+    if level == LevelNumber::L2 {
+        tlvs.area_proxy = area_proxy::build_local_area_proxy_tlv(instance.config);
+    }
+    tlvs
 }
 
 fn lsp_build_tlvs_router_cap(
@@ -1615,6 +1625,14 @@ pub(crate) fn install<'a>(
             .tx
             .protocol_input
             .spf_delay_event(level, spf::fsm::Event::Igp);
+
+        // Area Leader: rebuild Proxy LSP when Inside L2 LSP content changes.
+        if level == LevelNumber::L2
+            && instance.config.area_proxy.is_leader()
+            && lsp.tlvs.area_proxy.is_some()
+        {
+            instance.schedule_lsp_origination(LevelNumber::L2);
+        }
     }
 
     // Update the hostname database.
@@ -1689,16 +1707,22 @@ pub(crate) fn lsp_originate(
 ) {
     // Install LSP into the LSDB.
     let lse = install(instance, &mut arenas.lsp_entries, level, lsp);
+    let lse_id = lse.id;
+    let lsp_data = lse.data.clone();
 
-    // Flood LSP over all interfaces.
+    // Flood LSP over all interfaces (§5.2 filter applied inside srm_list_add).
     for iface in arenas.interfaces.iter_mut() {
-        iface.srm_list_add(instance, level, &lse.data, false);
+        iface.srm_list_add(instance, &arenas.lsp_entries, level, &lsp_data, false);
     }
 
     // Schedule LSP refreshing.
+    let lsdb = instance.state.lsdb.get_mut(level);
+    let (_, lse) = lsdb
+        .get_mut_by_id(&mut arenas.lsp_entries, lse_id)
+        .expect("LSP entry just installed");
     let refresh_timer = tasks::lsp_refresh_timer(
         level,
-        lse.id,
+        lse_id,
         instance.config.lsp_refresh,
         &instance.tx.protocol_input.lsp_refresh,
     );

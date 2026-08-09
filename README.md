@@ -290,6 +290,52 @@ Results from conformance testing performed with the Ixia IxANVL RFC Compliance T
 | ietf-system@2014-08-06 | 26.67% | 60.00% | 0.00% | - | [38.24%](https://holo-routing.github.io/ietf-yang-coverage/ietf-system@2014-08-06.html) |
 | ietf-vrrp@2018-03-13 | 53.19% | 80.00% | - | 66.67% | [66.35%](https://holo-routing.github.io/ietf-yang-coverage/ietf-vrrp@2018-03-13.html) |
 
+
+## Area Proxy (RFC 9666)
+
+This fork adds an implementation of [RFC 9666 *Area Proxy for IS-IS*](https://www.rfc-editor.org/rfc/rfc9666.html)
+on top of upstream Holo IS-IS.
+
+### What it does
+
+- **TLV 20 (Area Proxy)** named encode/decode on L2 LSP fragment 0 (sub-TLV 1 = Proxy System ID; sub-TLV 2 Area SID deferred).
+- **Configuration** via the private `holo-isis` YANG augmentation:
+  - instance `area-proxy/enabled`, `area-proxy/role` (`leader` | `edge` | `inside` | `static`), `area-proxy/proxy-system-id`
+  - interface `facing` (`inside` | `outside`) when area-proxy is enabled
+- **Proxy LSP**: Area Leader (or static) synthesizes a single L2 LSP sourced by the Proxy System ID from Inside Edge L2 LSPs.
+- **Inside Edge filtering (§5.2)**: outside-facing interfaces use the Proxy System ID as IIH/SNP source and do not flood internal L2 LSPs (L1 members / TLV 20 carriers) outward; CSNP/PSNP are filtered accordingly.
+
+Dynamic Area Leader election (RFC 9667) and full dual-view SPF (RFC 9666 §3.2) are **out of scope** for this milestone; use static `role`.
+
+### Example configuration (JSON)
+
+```json
+"ietf-isis:isis": {
+  "system-id": "0000.0000.0002",
+  "level-type": "level-1-2",
+  "area-address": ["49.0001"],
+  "holo-isis:area-proxy": {
+    "enabled": true,
+    "role": "holo-isis:area-proxy-role-edge",
+    "proxy-system-id": "0000.0000.00a0"
+  },
+  "interfaces": {
+    "interface": [
+      { "name": "eth1", "holo-isis:facing": "outside", "interface-type": "point-to-point" },
+      { "name": "eth2", "holo-isis:facing": "inside", "interface-type": "point-to-point" }
+    ]
+  }
+}
+```
+
+### Build & test
+
+```bash
+cargo test --all-features -p holo-isis
+```
+
+Upstream baseline: `holo-routing/holo` @ `196aa5d3fd45fb07f82726ede85efc02c47a1f1e`.
+
 ## Funding
 
 This project is funded through [NGI Zero Core](https://nlnet.nl/core), a

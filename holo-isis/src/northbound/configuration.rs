@@ -45,6 +45,31 @@ use crate::{ibus, spf, sr};
 #[derive(Debug)]
 pub enum Resource {}
 
+/// RFC 9666 Area Proxy role (static configuration; no RFC 9667 election).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum AreaProxyRole {
+    Leader,
+    Edge,
+    #[default]
+    Inside,
+    Static,
+}
+
+/// Interface facing relative to an Area Proxy area.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum InterfaceFacing {
+    #[default]
+    Inside,
+    Outside,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct InstanceAreaProxyCfg {
+    pub enabled: bool,
+    pub role: AreaProxyRole,
+    pub proxy_system_id: Option<SystemId>,
+}
+
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Event {
     InstanceReset,
@@ -108,6 +133,7 @@ pub struct InstanceCfg {
     pub flooding_reduction: InstanceFloodingReductionCfg,
     pub att_suppress: bool,
     pub att_ignore: bool,
+    pub area_proxy: InstanceAreaProxyCfg,
     pub sr: InstanceSrCfg,
     pub bier: InstanceBierCfg,
     pub spb: InstanceSpbCfg,
@@ -249,6 +275,7 @@ pub struct InterfaceCfg {
     pub passive: bool,
     pub csnp_interval: u16,
     pub csnp_disable: bool,
+    pub facing: InterfaceFacing,
     pub hello_padding: bool,
     pub interface_type: InterfaceType,
     pub node_flag: bool,
@@ -632,6 +659,21 @@ fn apply_instance(instance: &mut Instance, change: ConfigChange, event_queue: &m
                 event_queue.insert(Event::ReoriginateLsps(level));
             }
         }
+        ConfigChange::AreaProxyEnabled(enabled) => {
+            instance.config.area_proxy.enabled = enabled;
+            event_queue.insert(Event::ReoriginateLsps(LevelNumber::L2));
+            event_queue.insert(Event::InstanceUpdate);
+        }
+        ConfigChange::AreaProxyRole(role) => {
+            instance.config.area_proxy.role = role;
+            event_queue.insert(Event::ReoriginateLsps(LevelNumber::L2));
+            event_queue.insert(Event::InstanceUpdate);
+        }
+        ConfigChange::AreaProxyProxySystemId(proxy_system_id) => {
+            instance.config.area_proxy.proxy_system_id = proxy_system_id;
+            event_queue.insert(Event::ReoriginateLsps(LevelNumber::L2));
+            event_queue.insert(Event::InstanceUpdate);
+        }
     }
 
     Ok(())
@@ -792,6 +834,10 @@ fn apply_interface(instance: &mut Instance, ifname: &str, change: InterfaceChang
                         iface.config.csnp_disable = csnp_disable;
                         event_queue.insert(Event::InterfaceUpdateCsnpInterval(iface_idx));
                     }
+                }
+                InterfaceEntryChange::Facing(facing) => {
+                    iface.config.facing = facing.unwrap_or_default();
+                    event_queue.insert(Event::InterfaceRestartNetwork(iface_idx));
                 }
                 InterfaceEntryChange::HelloPaddingEnabled(hello_padding) => {
                     iface.config.hello_padding = hello_padding;
@@ -1692,6 +1738,33 @@ impl TraceOptionPacketResolved {
 
 // ===== configuration defaults =====
 
+
+impl InstanceAreaProxyCfg {
+    pub fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+
+    pub fn is_leader(&self) -> bool {
+        self.enabled
+            && matches!(self.role, AreaProxyRole::Leader | AreaProxyRole::Static)
+    }
+
+    /// Whether outside-facing interfaces should use Proxy SID and filter.
+    pub fn uses_proxy_sid_on_outside(&self) -> bool {
+        self.enabled
+            && matches!(
+                self.role,
+                AreaProxyRole::Edge | AreaProxyRole::Leader | AreaProxyRole::Static
+            )
+    }
+}
+
+impl InterfaceCfg {
+    pub fn is_outside_facing(&self) -> bool {
+        matches!(self.facing, InterfaceFacing::Outside)
+    }
+}
+
 impl Default for InstanceCfg {
     fn default() -> InstanceCfg {
         let enabled = isis::enabled::DFLT;
@@ -1754,6 +1827,7 @@ impl Default for InstanceCfg {
             flooding_reduction: Default::default(),
             att_suppress,
             att_ignore,
+            area_proxy: Default::default(),
             sr: Default::default(),
             bier: Default::default(),
             spb: Default::default(),
@@ -1897,6 +1971,7 @@ impl Default for InterfaceCfg {
             passive,
             csnp_interval,
             csnp_disable,
+            facing: InterfaceFacing::default(),
             hello_padding,
             interface_type,
             node_flag,

@@ -15,6 +15,7 @@ use chrono::Utc;
 use holo_utils::mac_addr::MacAddr;
 
 use crate::adjacency::{Adjacency, AdjacencyEvent, AdjacencyState};
+use crate::area_proxy;
 use crate::collections::{
     AdjacencyKey, InterfaceIndex, InterfaceKey, LspEntryKey,
 };
@@ -735,7 +736,7 @@ fn process_pdu_lsp(
             // from the network.
             lsp.set_rem_lifetime(0);
             for iface in arenas.interfaces.iter_mut() {
-                iface.srm_list_add(instance, level, &lsp, false);
+                iface.srm_list_add(instance, &arenas.lsp_entries, level, &lsp, false);
             }
             return Ok(());
         }
@@ -815,8 +816,8 @@ fn process_pdu_lsp(
             // Store the new LSP, replacing any existing one.
             let lse =
                 lsdb::install(instance, &mut arenas.lsp_entries, level, lsp);
-            let lsp = &lse.data;
             lse.flags.insert(LspEntryFlags::RECEIVED);
+            let lsp = lse.data.clone();
 
             // Update LSP flooding flags for the incoming interface.
             iface.srm_list_del(level, &lsp.lsp_id);
@@ -832,8 +833,8 @@ fn process_pdu_lsp(
                 .filter(|other_iface| other_iface.id != iface_id)
             {
                 // Determine whether the LSP should be flooded out this
-                // interface.
-                let allow_flood = match instance.config.flooding_reduction.algo
+                // interface (MANET ∧ Area Proxy §5.2).
+                let manet_ok = match instance.config.flooding_reduction.algo
                 {
                     FloodingAlgo::ZeroPruner => true,
                     FloodingAlgo::ModifiedManet => {
@@ -844,14 +845,30 @@ fn process_pdu_lsp(
                         )
                     }
                 };
+                let ap_ok = area_proxy::may_flood_lsp(
+                    instance.config,
+                    area_proxy::is_outside_facing(other_iface),
+                    level,
+                    &lsp,
+                    instance.state.lsdb.get(LevelNumber::L1),
+                    &arenas.lsp_entries,
+                );
+                let allow_flood = ap_ok && manet_ok;
                 if instance.config.trace_opts.flood_reduction {
-                    Debug::FloodDecision(level, lsp, other_iface, !allow_flood)
+                    Debug::FloodDecision(level, &lsp, other_iface, !allow_flood)
                         .log();
                 }
                 if allow_flood {
-                    other_iface.srm_list_add(instance, level, lsp, false);
+                    other_iface.srm_list_add(
+                        instance,
+                        &arenas.lsp_entries,
+                        level,
+                        &lsp,
+                        false,
+                    );
                     other_iface.ssn_list_del(level, &lsp.lsp_id);
-                } else {
+                } else if ap_ok {
+                    // MANET suppression only — still track for SNP when AP allows.
                     other_iface.ssn_list_add(level, lsp.as_snp_entry());
                 }
             }
@@ -907,7 +924,7 @@ fn process_pdu_lsp(
 
             // Determine whether the database LSP should be flooded back over
             // the incoming interface.
-            let allow_flood = match instance.config.flooding_reduction.algo {
+            let manet_ok = match instance.config.flooding_reduction.algo {
                 FloodingAlgo::ZeroPruner => true,
                 FloodingAlgo::ModifiedManet => flooding::manet::should_flood(
                     iface,
@@ -915,16 +932,27 @@ fn process_pdu_lsp(
                     &arenas.adjacencies,
                 ),
             };
+            let db_lsp = lse.data.clone();
+            let outside = area_proxy::is_outside_facing(iface);
+            let ap_ok = area_proxy::may_flood_lsp(
+                instance.config,
+                outside,
+                level,
+                &db_lsp,
+                instance.state.lsdb.get(LevelNumber::L1),
+                &arenas.lsp_entries,
+            );
+            let allow_flood = ap_ok && manet_ok;
             if instance.config.trace_opts.flood_reduction {
                 Debug::FloodDecision(level, &lsp, iface, !allow_flood).log();
             }
 
             // Update LSP flooding flags for the incoming interface.
             if allow_flood {
-                iface.srm_list_add(instance, level, &lse.data, false);
+                iface.srm_list_add(instance, &arenas.lsp_entries, level, &db_lsp, false);
                 iface.ssn_list_del(level, &lsp.lsp_id);
-            } else {
-                iface.ssn_list_add(level, lse.data.as_snp_entry());
+            } else if ap_ok {
+                iface.ssn_list_add(level, db_lsp.as_snp_entry());
             }
         }
     }
@@ -1057,7 +1085,7 @@ fn process_pdu_snp(
                 }
                 Ordering::Greater => {
                     iface.ssn_list_del(level, &entry.lsp_id);
-                    iface.srm_list_add(instance, level, &lse.data, false);
+                    iface.srm_list_add(instance, &arenas.lsp_entries, level, &lse.data, false);
                 }
                 Ordering::Less => {
                     iface.ssn_list_add(level, lse.data.as_snp_entry());
@@ -1105,7 +1133,7 @@ fn process_pdu_snp(
             // Exclude LSPs with zero sequence number.
             .filter(|lsp| lsp.seqno != 0)
         {
-            iface.srm_list_add(instance, level, lsp, false);
+            iface.srm_list_add(instance, &arenas.lsp_entries, level, lsp, false);
         }
     }
 
@@ -1170,7 +1198,7 @@ pub(crate) fn process_adj_init_lsdb_sync(
             .filter(|lsp| lsp.rem_lifetime != 0)
             .filter(|lsp| lsp.seqno != 0)
         {
-            iface.srm_list_add(instance, level, lsp, true);
+            iface.srm_list_add(instance, &arenas.lsp_entries, level, lsp, true);
         }
     }
 
@@ -1324,28 +1352,50 @@ pub(crate) fn process_send_psnp(
 
     // Add as many LSP entries that will fit in a single PDU.
     let mut lsp_entries = vec![];
-    for _ in 0..SnpTlvs::max_lsp_entries(
+    let max_entries = SnpTlvs::max_lsp_entries(
         instance.config.lsp_mtu as usize - Snp::PSNP_HEADER_LEN as usize,
         instance.config.auth.all.method(&instance.shared.keychains),
         iface.config.ext_seqnum_mode.get(level).is_some(),
-    ) {
-        if let Some((_, lsp_entry)) =
+    );
+    let lsdb_l1 = instance.state.lsdb.get(LevelNumber::L1);
+    let lsdb = instance.state.lsdb.get(level);
+    let outside = area_proxy::is_outside_facing(iface);
+    while lsp_entries.len() < max_entries {
+        let Some((_, lsp_entry)) =
             iface.state.ssn_list.get_mut(level).pop_first()
-        {
-            lsp_entries.push(lsp_entry);
-        } else {
+        else {
             break;
+        };
+        // §5.2: drop filtered entries on outside-facing interfaces.
+        if let Some((_, lse)) =
+            lsdb.get_by_lspid(&arenas.lsp_entries, &lsp_entry.lsp_id)
+        {
+            if !area_proxy::may_flood_lsp(
+                instance.config,
+                outside,
+                level,
+                &lse.data,
+                lsdb_l1,
+                &arenas.lsp_entries,
+            ) {
+                continue;
+            }
         }
+        lsp_entries.push(lsp_entry);
     }
 
-    // Generate PDU.
+    // Do not send empty PSNP after filtering.
+    if lsp_entries.is_empty() {
+        return Ok(());
+    }
+
+    // Generate PDU (source = Proxy SID on outside-facing edge).
     let ext_seqnum = iface.ext_seqnum_next(level);
+    let source_sid = area_proxy::snp_source_system_id(instance.config, iface)
+        .unwrap_or_else(|| instance.config.system_id.unwrap());
     let pdu = Pdu::Snp(Snp::new(
         level,
-        LanId::from((
-            instance.config.system_id.unwrap(),
-            iface.state.circuit_id,
-        )),
+        LanId::from((source_sid, iface.state.circuit_id)),
         None,
         SnpTlvs::new(lsp_entries, ext_seqnum),
     ));
@@ -1377,11 +1427,11 @@ pub(crate) fn process_send_csnp(
         return Ok(());
     }
 
-    // Set CSNP source.
-    let source = LanId::from((
-        instance.config.system_id.unwrap(),
-        iface.state.circuit_id,
-    ));
+    // Set CSNP source (Proxy SID on outside-facing edge).
+    let source_sid = area_proxy::snp_source_system_id(instance.config, iface)
+        .unwrap_or_else(|| instance.config.system_id.unwrap());
+    let source = LanId::from((source_sid, iface.state.circuit_id));
+    let outside = area_proxy::is_outside_facing(iface);
 
     // Calculate maximum of LSP entries per PDU.
     let max_lsp_entries = SnpTlvs::max_lsp_entries(
@@ -1390,50 +1440,61 @@ pub(crate) fn process_send_csnp(
         iface.config.ext_seqnum_mode.get(level).is_some(),
     );
 
-    // Closure to generate and send CSNP.
-    let mut send_csnp = |level, source, start, end, lsp_entries: Vec<_>| {
-        // Generate PDU.
-        let ext_seqnum = iface.ext_seqnum_next(level);
-        let pdu = Pdu::Snp(Snp::new(
-            level,
-            source,
-            Some((start, end)),
-            SnpTlvs::new(lsp_entries, ext_seqnum),
-        ));
-
-        // Enqueue PDU for transmission.
-        iface.enqueue_pdu(pdu, level);
-    };
-
-    // Iterate over LSDB and send as many CSNPs as necessary.
-    let mut start = LspId::from([0; 8]);
-    let mut lsp_entries = vec![];
-    let lsdb = instance.state.lsdb.get(level);
-    let mut lsdb_iter = lsdb
+    // Pre-filter LSDB entries for Area Proxy §5.2 (outside-facing).
+    let lsdb_l1 = instance.state.lsdb.get(LevelNumber::L1);
+    let filtered: Vec<_> = instance
+        .state
+        .lsdb
+        .get(level)
         .iter(&arenas.lsp_entries)
         .map(|lse| &lse.data)
-        .peekable();
-    while let Some(lsp) = lsdb_iter.next() {
-        // Add current LSP entry.
-        lsp_entries.push(lsp.as_snp_entry());
+        .filter(|lsp| {
+            area_proxy::may_flood_lsp(
+                instance.config,
+                outside,
+                level,
+                lsp,
+                lsdb_l1,
+                &arenas.lsp_entries,
+            )
+        })
+        .map(|lsp| (lsp.lsp_id, lsp.as_snp_entry()))
+        .collect();
 
-        // Check if this is the last LSP.
-        let Some(next_lsp) = lsdb_iter.peek() else {
-            // Send the final CSNP.
+    // Do not send CSNP if filtering removed all entries.
+    if filtered.is_empty() {
+        return Ok(());
+    }
+
+    // Iterate over filtered entries and send as many CSNPs as necessary.
+    let mut start = LspId::from([0; 8]);
+    let mut window = vec![];
+    let mut iter = filtered.into_iter().peekable();
+    while let Some((lsp_id, entry)) = iter.next() {
+        window.push(entry);
+        let Some((next_id, _)) = iter.peek() else {
             let end = LspId::from([0xff; 8]);
-            (send_csnp)(level, source, start, end, lsp_entries);
+            let ext_seqnum = iface.ext_seqnum_next(level);
+            let pdu = Pdu::Snp(Snp::new(
+                level,
+                source,
+                Some((start, end)),
+                SnpTlvs::new(std::mem::take(&mut window), ext_seqnum),
+            ));
+            iface.enqueue_pdu(pdu, level);
             break;
         };
-
-        // If max LSP entries reached, send current CSNP.
-        if lsp_entries.len() == max_lsp_entries {
-            // Set end LSP ID to current LSP ID.
-            let end = lsp.lsp_id;
-            let lsp_entries = std::mem::take(&mut lsp_entries);
-            (send_csnp)(level, source, start, end, lsp_entries);
-
-            // Update start for the next CSNP.
-            start = next_lsp.lsp_id;
+        if window.len() == max_lsp_entries {
+            let end = lsp_id;
+            let ext_seqnum = iface.ext_seqnum_next(level);
+            let pdu = Pdu::Snp(Snp::new(
+                level,
+                source,
+                Some((start, end)),
+                SnpTlvs::new(std::mem::take(&mut window), ext_seqnum),
+            ));
+            iface.enqueue_pdu(pdu, level);
+            start = *next_id;
         }
     }
 
@@ -1459,6 +1520,12 @@ pub(crate) fn process_lsp_originate(
         .filter(|level| level_type.intersects(level))
     {
         lsdb::lsp_originate_all(instance, arenas, level);
+    }
+
+    // Area Proxy: leader synthesizes / refreshes Proxy LSP (L2) independently
+    // of the local system-id origination set.
+    if level_type.intersects(LevelNumber::L2) {
+        area_proxy::originate_proxy_lsp(instance, arenas);
     }
 
     Ok(())
@@ -1505,14 +1572,13 @@ pub(crate) fn process_lsp_purge(
 
     // Reinstall the LSP to trigger a SPF run.
     let lse = lsdb::install(instance, &mut arenas.lsp_entries, level, lsp);
-    let lsp = &lse.data;
-
     // Stop the LSP's refresh timer.
     lse.refresh_timer = None;
+    let lsp = lse.data.clone();
 
-    // Send purged LSP to all interfaces.
+    // Send purged LSP to all interfaces (filter inside srm_list_add).
     for iface in arenas.interfaces.iter_mut() {
-        iface.srm_list_add(instance, level, lsp, false);
+        iface.srm_list_add(instance, &arenas.lsp_entries, level, &lsp, false);
     }
 
     Ok(())

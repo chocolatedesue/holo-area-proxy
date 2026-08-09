@@ -106,6 +106,13 @@ static IDENTITY_TYPES: &[(&str, TypeSpec)] = &[
         },
     ),
     (
+        "area-proxy-role",
+        TypeSpec {
+            rust_type: "AreaProxyRole",
+            copy_semantics: true,
+        },
+    ),
+    (
         "lsp-log-reason",
         TypeSpec {
             rust_type: "LspLogReason",
@@ -137,6 +144,13 @@ static IDENTITY_TYPES: &[(&str, TypeSpec)] = &[
 
 // IS-IS-specific YANG leaf types.
 static LEAF_TYPES: &[(&str, TypeSpec)] = &[
+    (
+        "/ietf-routing:routing/control-plane-protocols/control-plane-protocol/ietf-isis:isis/interfaces/interface/holo-isis:facing",
+        TypeSpec {
+            rust_type: "InterfaceFacing",
+            copy_semantics: true,
+        },
+    ),
     (
         "/ietf-routing:routing/control-plane-protocols/control-plane-protocol/ietf-isis:isis/interfaces/interface/ietf-isis-link-attr:isis-asla/interface-asla/link-attr-app",
         TypeSpec {

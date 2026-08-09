@@ -30,12 +30,13 @@ use tracing::debug_span;
 
 use crate::packet::error::{TlvDecodeError, TlvDecodeResult};
 use crate::packet::iana::{
-    AuthenticationType, MtCapStlvType, NeighborStlvType, Nlpid, PrefixStlvType,
-    RouterCapStlvType, TlvType,
+    AreaProxyStlvType, AuthenticationType, MtCapStlvType, NeighborStlvType,
+    Nlpid, PrefixStlvType, RouterCapStlvType, TlvType,
 };
 #[cfg(feature = "testing")]
 use crate::packet::pdu::serde_lsp_rem_lifetime_filter;
 use crate::packet::subtlvs::MsdStlv;
+use crate::packet::subtlvs::area_proxy::AreaProxySystemIdStlv;
 use crate::packet::subtlvs::capability::{
     FadStlv, FapmStlv, FloodingAlgoStlv, NodeAdminTagStlv, SrAlgoStlv,
     SrCapabilitiesStlv, SrLocalBlockStlv,
@@ -487,6 +488,27 @@ pub struct UnknownTlv {
     pub tlv_type: u8,
     pub length: u8,
     pub value: Bytes,
+}
+
+/// Area Proxy TLV (Type 20) — RFC 9666.
+///
+/// Carries only Sub-TLVs (no fixed header fields). An empty container is valid
+/// and signals Area Proxy readiness on an Inside node.
+#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Deserialize, Serialize)]
+pub struct AreaProxyTlv {
+    pub sub_tlvs: AreaProxySubTlvs,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+#[serde_with::apply(
+    Option => #[serde(default, skip_serializing_if = "Option::is_none")],
+    Vec => #[serde(default, skip_serializing_if = "Vec::is_empty")],
+)]
+#[derive(Deserialize, Serialize)]
+pub struct AreaProxySubTlvs {
+    pub proxy_system_id: Option<AreaProxySystemIdStlv>,
+    pub unknown: Vec<UnknownTlv>,
 }
 
 // ===== impl Nlpid =====
@@ -2909,3 +2931,76 @@ where
     tlvs.shrink_to_fit();
     tlvs
 }
+
+// ===== impl AreaProxyTlv =====
+
+impl AreaProxyTlv {
+    pub(crate) fn decode(
+        _tlv_len: u8,
+        buf: &mut Bytes,
+    ) -> TlvDecodeResult<Self> {
+        let mut sub_tlvs = AreaProxySubTlvs::default();
+        while buf.remaining() >= TLV_HDR_SIZE {
+            let stlv_type = buf.try_get_u8()?;
+            let stlv_etype = AreaProxyStlvType::from_u8(stlv_type);
+            let stlv_len = buf.try_get_u8()?;
+            if stlv_len as usize > buf.remaining() {
+                return Err(TlvDecodeError::InvalidLength(stlv_len));
+            }
+            let span =
+                debug_span!("sub-TLV", r#type = stlv_type, length = stlv_len);
+            let _span_guard = span.enter();
+            let mut buf_stlv = buf.copy_to_bytes(stlv_len as usize);
+            match stlv_etype {
+                Some(AreaProxyStlvType::SystemId) => {
+                    if sub_tlvs.proxy_system_id.is_some() {
+                        continue;
+                    }
+                    match AreaProxySystemIdStlv::decode(stlv_len, &mut buf_stlv)
+                    {
+                        Ok(stlv) => sub_tlvs.proxy_system_id = Some(stlv),
+                        Err(error) => error.log(),
+                    }
+                }
+                // Area SID (type 2) deferred to a later phase — keep as unknown.
+                _ => {
+                    sub_tlvs.unknown.push(UnknownTlv::new(
+                        stlv_type,
+                        stlv_len,
+                        buf_stlv,
+                    ));
+                }
+            }
+        }
+        Ok(AreaProxyTlv { sub_tlvs })
+    }
+
+    pub(crate) fn encode(&self, buf: &mut BytesMut) {
+        let start_pos = tlv_encode_start(buf, TlvType::AreaProxy);
+        if let Some(stlv) = &self.sub_tlvs.proxy_system_id {
+            stlv.encode(buf);
+        }
+        tlv_encode_end(buf, start_pos);
+    }
+
+    /// Convenience constructor with an optional proxy system identifier.
+    pub fn with_proxy_system_id(system_id: Option<SystemId>) -> Self {
+        AreaProxyTlv {
+            sub_tlvs: AreaProxySubTlvs {
+                proxy_system_id: system_id.map(AreaProxySystemIdStlv::new),
+                unknown: vec![],
+            },
+        }
+    }
+}
+
+impl Tlv for AreaProxyTlv {
+    fn len(&self) -> usize {
+        let mut len = TLV_HDR_SIZE;
+        if let Some(stlv) = &self.sub_tlvs.proxy_system_id {
+            len += stlv.len();
+        }
+        len
+    }
+}
+

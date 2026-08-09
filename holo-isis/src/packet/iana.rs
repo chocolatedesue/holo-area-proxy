@@ -47,6 +47,7 @@ pub enum TlvType {
     ExtendedSeqNum = 11,
     PurgeOriginatorId = 13,
     LspBufferSize = 14,
+    AreaProxy = 20,
     ExtIsReach = 22,
     Ipv4InternalReach = 128,
     ProtocolsSupported = 129,
@@ -182,6 +183,19 @@ pub enum RouterCapStlvType {
     FlexAlgoDefinition = 26,
     // FIXME: TBD1 in https://datatracker.ietf.org/doc/html/draft-prz-lsr-interop-flood-reduction-architecture-01#section-2.4
     FloodingAlgo = 40,
+}
+
+// IS-IS Sub-TLVs for the Area Proxy TLV.
+//
+// IANA registry:
+// https://www.iana.org/assignments/isis-tlv-codepoints/isis-tlv-codepoints.xhtml
+// (Sub-TLVs for TLV 20 / RFC 9666)
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(FromPrimitive, ToPrimitive)]
+#[derive(Deserialize, Serialize)]
+pub enum AreaProxyStlvType {
+    SystemId = 1,
+    AreaSid = 2,
 }
 
 // IS-IS Sub-Sub-TLVs for Flexible Algorithm Definition Sub-TLV.

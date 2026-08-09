@@ -7,6 +7,7 @@
 // See: https://nlnet.nl/NGI0
 //
 
+pub mod area_proxy;
 pub mod capability;
 pub mod neighbor;
 pub mod prefix;

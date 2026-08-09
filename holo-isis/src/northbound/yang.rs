@@ -16,7 +16,7 @@ use crate::adjacency::{AdjacencyEvent, AdjacencyState};
 use crate::error::AdjacencyRejectError;
 use crate::interface::InterfaceType;
 use crate::lsdb::LspLogReason;
-use crate::northbound::configuration::{ExtendedSeqNumMode, InstanceTraceOption, InterfaceTraceOption, MetricType, StandardApp};
+use crate::northbound::configuration::{AreaProxyRole, ExtendedSeqNumMode, InstanceTraceOption, InterfaceFacing, InterfaceTraceOption, MetricType, StandardApp};
 use crate::packet::iana::{AslaSabmFlags, FadFlags, FloodingAlgo, IgpAlgoType, IgpMetricType, MtId};
 use crate::packet::pdu::LspFlags;
 use crate::packet::subtlvs::capability::SrCapabilitiesFlags;
@@ -458,6 +458,30 @@ impl TryFromYang for FloodingAlgo {
         }
     }
 }
+
+
+impl TryFromYang for AreaProxyRole {
+    fn try_from_yang(value: &str) -> Option<AreaProxyRole> {
+        match value {
+            "holo-isis:area-proxy-role-leader" => Some(AreaProxyRole::Leader),
+            "holo-isis:area-proxy-role-edge" => Some(AreaProxyRole::Edge),
+            "holo-isis:area-proxy-role-inside" => Some(AreaProxyRole::Inside),
+            "holo-isis:area-proxy-role-static" => Some(AreaProxyRole::Static),
+            _ => None,
+        }
+    }
+}
+
+impl TryFromYang for InterfaceFacing {
+    fn try_from_yang(value: &str) -> Option<InterfaceFacing> {
+        match value {
+            "inside" => Some(InterfaceFacing::Inside),
+            "outside" => Some(InterfaceFacing::Outside),
+            _ => None,
+        }
+    }
+}
+
 
 impl TryFromYang for ExtendedSeqNumMode {
     fn try_from_yang(value: &str) -> Option<ExtendedSeqNumMode> {

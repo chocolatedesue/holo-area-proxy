@@ -22,6 +22,7 @@ use tokio::sync::mpsc;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::adjacency::{Adjacency, AdjacencyEvent, AdjacencyState};
+use crate::area_proxy;
 use crate::collections::{Adjacencies, Arena, InterfaceId, InterfaceIndex};
 use crate::debug::{Debug, InterfaceInactiveReason};
 use crate::error::{Error, IoError};
@@ -523,7 +524,8 @@ impl Interface {
 
         // Fixed fields.
         let circuit_type = self.config.level_type.resolved;
-        let source = instance.config.system_id.unwrap();
+        let source = area_proxy::hello_source(instance.config, self)
+            .unwrap_or_else(|| instance.config.system_id.unwrap());
         let holdtime = self.config.hello_holdtime(level);
         let variant = match self.config.interface_type {
             InterfaceType::Broadcast => HelloVariant::Lan {
@@ -723,6 +725,7 @@ impl Interface {
     pub(crate) fn srm_list_add(
         &mut self,
         instance: &InstanceUpView<'_>,
+        lsp_entries: &crate::collections::Arena<crate::lsdb::LspEntry>,
         level: LevelNumber,
         lsp: &Lsp,
         rxmt_only: bool,
@@ -731,6 +734,18 @@ impl Interface {
         if !self.state.active
             || !self.config.level_type.resolved.intersects(level)
         {
+            return;
+        }
+
+        // RFC 9666 §5.2 Inside Edge filtering on outside-facing interfaces.
+        if !area_proxy::may_flood_lsp(
+            instance.config,
+            area_proxy::is_outside_facing(self),
+            level,
+            lsp,
+            instance.state.lsdb.get(LevelNumber::L1),
+            lsp_entries,
+        ) {
             return;
         }
 

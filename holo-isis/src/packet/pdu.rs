@@ -30,9 +30,9 @@ use crate::packet::subtlvs::capability::{
     FloodingAlgoStlv, SrAlgoStlv, SrCapabilitiesStlv,
 };
 use crate::packet::tlv::{
-    AreaAddressesTlv, AuthenticationTlv, DynamicHostnameTlv, ExtendedSeqNum,
-    ExtendedSeqNumTlv, Ipv4AddressesTlv, Ipv4Reach, Ipv4ReachTlv,
-    Ipv4RouterIdTlv, Ipv6AddressesTlv, Ipv6Reach, Ipv6ReachTlv,
+    AreaAddressesTlv, AreaProxyTlv, AuthenticationTlv, DynamicHostnameTlv,
+    ExtendedSeqNum, ExtendedSeqNumTlv, Ipv4AddressesTlv, Ipv4Reach,
+    Ipv4ReachTlv, Ipv4RouterIdTlv, Ipv6AddressesTlv, Ipv6Reach, Ipv6ReachTlv,
     Ipv6RouterIdTlv, IsReach, IsReachTlv, LegacyIpv4Reach, LegacyIpv4ReachTlv,
     LegacyIsReach, LegacyIsReachTlv, LspBufferSizeTlv, LspEntriesTlv, LspEntry,
     MtCapabilityTlv, MtFlags, MultiTopologyEntry, MultiTopologyTlv,
@@ -151,6 +151,7 @@ pub struct LspTlvs {
     pub protocols_supported: Option<ProtocolsSupportedTlv>,
     pub router_cap: Vec<RouterCapTlv>,
     pub mt_cap: Vec<MtCapabilityTlv>,
+    pub area_proxy: Option<AreaProxyTlv>,
     pub area_addrs: Vec<AreaAddressesTlv>,
     pub multi_topology: Vec<MultiTopologyTlv>,
     pub purge_originator_id: Option<PurgeOriginatorIdTlv>,
@@ -1209,6 +1210,23 @@ impl Lsp {
                         Err(error) => error.log(),
                     }
                 }
+                Some(TlvType::AreaProxy) => {
+                    // RFC 9666: Area Proxy TLV MUST be ignored on L1 LSPs.
+                    if hdr.pdu_type == PduType::LspL1 {
+                        continue;
+                    }
+                    // Prefer fragment 0 only for structured storage.
+                    if lsp_id.fragment != 0 {
+                        continue;
+                    }
+                    if tlvs.area_proxy.is_some() {
+                        continue;
+                    }
+                    match AreaProxyTlv::decode(tlv_len, &mut buf_tlv) {
+                        Ok(tlv) => tlvs.area_proxy = Some(tlv),
+                        Err(error) => error.log(),
+                    }
+                }
                 _ => {
                     // Save unknown top-level TLV.
                     tlvs.unknown
@@ -1270,6 +1288,9 @@ impl Lsp {
                 tlv.encode(&mut buf);
             }
             for tlv in &self.tlvs.mt_cap {
+                tlv.encode(&mut buf);
+            }
+            if let Some(tlv) = &self.tlvs.area_proxy {
                 tlv.encode(&mut buf);
             }
             for tlv in &self.tlvs.area_addrs {
@@ -1507,6 +1528,7 @@ impl LspTlvs {
             )),
             router_cap,
             mt_cap,
+            area_proxy: None,
             area_addrs: tlv_entries_split(area_addrs),
             multi_topology: tlv_entries_split(multi_topology),
             purge_originator_id: None,
@@ -1549,6 +1571,18 @@ impl LspTlvs {
         }
         let router_cap = tlv_take_max(&mut self.router_cap, &mut rem_len);
         let mt_cap = tlv_take_max(&mut self.mt_cap, &mut rem_len);
+        // Prefer fragment 0 for Area Proxy TLV (RFC 9666).
+        let area_proxy = self.area_proxy.take().and_then(|tlv| {
+            let tlv_len = tlv.len();
+            if tlv_len <= rem_len {
+                rem_len -= tlv_len;
+                Some(tlv)
+            } else {
+                // Put back if it does not fit (should not happen for frag0).
+                self.area_proxy = Some(tlv);
+                None
+            }
+        });
         let area_addrs = tlv_take_max(&mut self.area_addrs, &mut rem_len);
         let multi_topology =
             tlv_take_max(&mut self.multi_topology, &mut rem_len);
@@ -1591,6 +1625,7 @@ impl LspTlvs {
             protocols_supported,
             router_cap,
             mt_cap,
+            area_proxy,
             area_addrs,
             multi_topology,
             purge_originator_id: None,
@@ -1650,6 +1685,7 @@ impl LspTlvs {
         self.protocols_supported.is_none()
             && self.router_cap.is_empty()
             && self.mt_cap.is_empty()
+            && self.area_proxy.is_none()
             && self.area_addrs.is_empty()
             && self.multi_topology.is_empty()
             && self.lsp_buf_size.is_none()
