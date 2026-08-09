@@ -1,0 +1,36 @@
+module holo-ietf-ipv6-unicast-routing-deviations {
+  yang-version 1.1;
+  namespace "http://holo-routing.org/yang/holo-ietf-ipv6-unicast-routing-deviations";
+  prefix holo-ietf-ipv6-unicast-routing-deviations;
+
+  import ietf-interfaces {
+    prefix if;
+  }
+
+  import ietf-ip {
+    prefix ip;
+  }
+
+  import ietf-routing {
+    prefix rt;
+  }
+
+  import ietf-ipv6-unicast-routing {
+    prefix v6ur;
+  }
+
+  organization
+    "Holo Routing Stack";
+
+  description
+    "This module defines deviation statements for the ietf-ipv6-unicast-routing
+     module.";
+
+  /*
+   * Not supported nodes
+   */
+
+  deviation "/if:interfaces/if:interface/ip:ipv6/v6ur:ipv6-router-advertisements" {
+    deviate not-supported;
+  }
+}

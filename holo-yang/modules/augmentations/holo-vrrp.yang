@@ -1,0 +1,73 @@
+module holo-vrrp {
+  yang-version 1.1;
+  namespace "http://holo-routing.org/yang/holo-vrrp";
+  prefix holo-vrrp;
+
+  import ietf-interfaces {
+    prefix if;
+  }
+
+  import ietf-routing {
+    prefix rt;
+  }
+
+  import ietf-vrrp {
+    prefix vrrp;
+  }
+
+  organization
+    "Holo Routing Stack";
+
+  description
+    "This module defines augment statements for the ietf-vrrp
+     module.";
+
+  /*
+   * Identities.
+   */
+
+  identity vrrp {
+    base rt:routing-protocol;
+    description
+      "VRRP protocol.";
+  }
+
+  identity incomplete-packet {
+    base vrrp:vrrp-error-global;
+    description
+      "A packet has been received with a packet length less
+       than the length of the VRRP header.";
+  }
+
+  /*
+   * Augmentations.
+   */
+
+  augment "/if:interfaces/if:interface" {
+    description
+      "VRRP interface augmentations";
+
+    container vrrp {
+      description
+        "VRRP interface parameters.";
+
+      container trace-options {
+        description "Trace options for VRRP.";
+
+        list flag {
+          key name;
+          description "List of tracing options.";
+          leaf name {
+            description
+              "List of tracing options";
+            type enumeration {
+              enum events;
+              enum internal-bus;
+              enum packets;
+            }
+          }
+        }
+      }
+    }
+  }
+}

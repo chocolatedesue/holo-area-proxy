@@ -1,0 +1,82 @@
+module holo-ietf-mpls-ldp-deviations {
+  yang-version 1.1;
+  namespace "http://holo-routing.org/yang/holo-ietf-mpls-ldp-deviations";
+  prefix holo-ietf-mpls-ldp-deviations;
+
+  import ietf-routing {
+    prefix rt;
+  }
+
+  import ietf-mpls-ldp {
+    prefix ldp;
+  }
+
+  import ietf-key-chain {
+    prefix key-chain;
+  }
+
+  organization
+    "Holo Routing Stack";
+
+  description
+    "This module defines deviation statements for the ietf-mpls-ldp
+     module.";
+
+  /*
+   * Added constraints
+   */
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/ldp:mpls-ldp/ldp:peers/ldp:authentication/ldp:authentication-type/ldp:password/ldp:crypto-algorithm" {
+    deviate add {
+      must 'derived-from-or-self(., "key-chain:md5")' {
+        error-message
+          "Unsupported cryptographic algorithm.";
+      }
+    }
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/ldp:mpls-ldp/ldp:peers/ldp:peer/ldp:authentication/ldp:authentication-type/ldp:password/ldp:crypto-algorithm" {
+    deviate add {
+      must 'derived-from-or-self(., "key-chain:md5")' {
+        error-message
+          "Unsupported cryptographic algorithm.";
+      }
+    }
+  }
+
+  /*
+   * Not supported nodes
+   */
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/ldp:mpls-ldp/ldp:discovery/ldp:interfaces/ldp:interface/ldp:address-families/ldp:ipv4/ldp:hello-adjacencies/ldp:hello-adjacency/ldp:flag" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/ldp:mpls-ldp/ldp:discovery/ldp:targeted/ldp:address-families/ldp:ipv4/ldp:hello-adjacencies/ldp:hello-adjacency/ldp:flag" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/ldp:mpls-ldp/ldp:peers/ldp:peer/ldp:address-families/ldp:ipv4/ldp:hello-adjacencies/ldp:hello-adjacency/ldp:flag" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/ldp:mpls-ldp/ldp:global/ldp:graceful-restart" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/ldp:mpls-ldp/ldp:discovery/ldp:targeted/ldp:address-families/ldp:ipv4/ldp:target/ldp:local-address" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/ldp:mpls-ldp/ldp:peers/ldp:peer/ldp:address-families/ldp:ipv4/ldp:hello-adjacencies/ldp:hello-adjacency/ldp:interface" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/ldp:mpls-ldp/ldp:peers/ldp:peer/ldp:received-peer-state/ldp:graceful-restart" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/ldp:mpls-ldp/ldp:peers/ldp:peer/ldp:received-peer-state/ldp:capability/ldp:upstream-label-assignment" {
+    deviate not-supported;
+  }
+}

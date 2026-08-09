@@ -1,0 +1,110 @@
+[package]
+name = "holo-daemon"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+
+[dependencies]
+console-subscriber = { version = "0.5", optional = true }
+prost-types = "0.14"
+tikv-jemallocator = { version = "0.6", optional = true }
+toml = "0.9"
+tokio-uring = { version = "0.5", optional = true }
+tokio-stream = "0.1"
+tracing-appender = "0.2"
+tracing-journald = "0.3"
+
+capctl.workspace = true
+chrono.workspace = true
+clap.workspace = true
+derive-new.workspace = true
+futures.workspace = true
+itertools.workspace = true
+nix.workspace = true
+pickledb.workspace = true
+prost.workspace = true
+rustc_tools_util.workspace = true
+serde.workspace = true
+tokio.workspace = true
+tonic.workspace = true
+tonic-prost.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+yang5.workspace = true
+
+holo-interface = { path = "../holo-interface", optional = true  }
+holo-bfd = { path = "../holo-bfd", optional = true }
+holo-bgp = { path = "../holo-bgp", optional = true }
+holo-igmp = { path = "../holo-igmp", optional = true }
+holo-isis = { path = "../holo-isis", optional = true }
+holo-keychain = { path = "../holo-keychain", optional = true }
+holo-ldp = { path = "../holo-ldp", optional = true }
+holo-northbound = { path = "../holo-northbound" }
+holo-ospf = { path = "../holo-ospf", optional = true }
+holo-policy = { path = "../holo-policy", optional = true }
+holo-protocol = { path = "../holo-protocol" }
+holo-rip = { path = "../holo-rip", optional = true }
+holo-routing = { path = "../holo-routing", optional = true  }
+holo-system = { path = "../holo-system", optional = true }
+holo-utils = { path = "../holo-utils" }
+holo-vrrp = { path = "../holo-vrrp", optional = true  }
+holo-yang = { path = "../holo-yang" }
+
+[build-dependencies]
+rustc_tools_util.workspace = true
+tonic-prost-build.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "holod"
+path = "src/main.rs"
+
+[features]
+default = ["base", "protocols", "yang5_bundled"]
+
+base = [
+  "interface",
+  "keychain",
+  "policy",
+  "routing",
+  "system",
+]
+
+protocols = [
+  "bfd",
+  "bgp",
+  # IGMP support is under development and currently non-functional.
+  #"igmp",
+  "isis",
+  "ldp",
+  "ospf",
+  "rip",
+  "vrrp",
+]
+
+# Base components
+interface = ["dep:holo-interface"]
+keychain = ["dep:holo-keychain"]
+policy = ["dep:holo-policy", "dep:holo-routing"]
+routing = ["dep:holo-routing", "dep:holo-interface"]
+system = ["dep:holo-system"]
+
+# Protocols
+bfd = ["dep:holo-bfd", "holo-routing/bfd"]
+bgp = ["dep:holo-bgp", "holo-routing/bgp"]
+igmp = ["dep:holo-igmp", "holo-routing/igmp"]
+isis = ["dep:holo-isis", "holo-routing/isis"]
+ldp = ["dep:holo-ldp", "holo-routing/ldp"]
+ospf = ["dep:holo-ospf", "holo-routing/ospf"]
+rip = ["dep:holo-rip", "holo-routing/rip"]
+vrrp = ["dep:holo-vrrp", "holo-interface/vrrp"]
+
+# Other features
+io_uring = ["dep:tokio-uring"]
+jemalloc = ["dep:tikv-jemallocator"]
+tokio_console = ["dep:console-subscriber"]
+yang5_bundled = ["yang5/bundled"]
+fastclick = ["holo-utils/fastclick"]

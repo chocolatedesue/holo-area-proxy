@@ -1,0 +1,224 @@
+module holo-bgp {
+  yang-version 1.1;
+  namespace "http://holo-routing.org/yang/holo-bgp";
+  prefix holo-bgp;
+
+  import ietf-routing {
+    prefix rt;
+  }
+
+  import iana-bgp-types {
+    prefix bt;
+  }
+
+  import iana-bgp-rib-types {
+    prefix brt;
+  }
+
+  import iana-bgp-notification {
+    prefix bn;
+  }
+
+  import ietf-bgp {
+    prefix bgp;
+  }
+
+  organization
+    "Holo Routing Stack";
+
+  description
+    "This module defines augment statements for the ietf-bgp
+     module.";
+
+  /*
+   * Identities.
+   */
+
+  identity ineligible-unresolvable {
+    base brt:ineligible-route-reason;
+    description
+      "Route was ineligible due to unresolvable next-hop";
+  }
+
+  identity unknown-error {
+    base bn:bgp-notification;
+    description
+      "Unknown error code";
+  }
+
+  identity graceful-restart {
+    base bt:bgp-capability;
+    description
+      "Graceful restart functionality";
+    reference
+      "RFC 4724: Graceful Restart Mechanism for BGP.";
+  }
+
+  identity add-paths {
+    base bt:bgp-capability;
+    description
+      "Advertisement of multiple paths for the same address prefix
+       without the new paths implicitly replacing any previous
+       ones.";
+    reference
+      "RFC 7911: Advertisement of Multiple Paths in BGP.";
+  }
+
+  identity enhanced-route-refresh {
+    base bt:bgp-capability;
+    description
+      "The BGP enhanced route-refresh functionality";
+    reference
+      "RFC 7313: Enhanced Route Refresh Capability for BGP-4";
+  }
+
+  /*
+   * Augmentations.
+   */
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/bgp:bgp/bgp:global" {
+    leaf reject-as-sets {
+      type boolean;
+      default "true";
+      description
+        "When set to true, routes containing AS_PATH or AS4_PATH attributes
+         with AS_SET or AS_CONFED_SET segments are rejected and treated
+         as withdrawn, in accordance with the error handling procedures
+         defined in RFC 7606.";
+      reference
+        "RFC 9774: Deprecation of AS_SET and AS_CONFED_SET in BGP";
+    }
+
+    container trace-options {
+      description "Instance level trace options for BGP.";
+
+      list flag {
+        key name;
+        description "List of tracing options.";
+        leaf name {
+          description
+            "List of tracing options";
+          type enumeration {
+            enum internal-bus;
+            enum events;
+            enum nexthop-tracking;
+            enum packets-all;
+            enum packets-open;
+            enum packets-update;
+            enum packets-notification;
+            enum packets-keepalive;
+            enum packets-refresh;
+            enum route;
+          }
+        }
+        leaf send {
+          description "Trace sent packets.";
+          type boolean;
+          default true;
+        }
+        leaf receive {
+          description "Trace received packets.";
+          type boolean;
+          default true;
+        }
+      }
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:clear/bgp:input" {
+    leaf remote-addr {
+      type leafref {
+        path "/rt:routing/rt:control-plane-protocols/"
+          + "rt:control-plane-protocol/bgp:bgp/bgp:neighbors/"
+          + "bgp:neighbor/bgp:remote-address";
+      }
+      description
+        "IP address of the neighbor";
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor" {
+    container trace-options {
+      list flag {
+        key name;
+        description "List of tracing options.";
+        leaf name {
+          description
+            "List of tracing options";
+          type enumeration {
+            enum events;
+            enum packets-all;
+            enum packets-open;
+            enum packets-update;
+            enum packets-notification;
+            enum packets-keepalive;
+            enum packets-refresh;
+          }
+        }
+        leaf send {
+          description "Trace sent packets.";
+          type boolean;
+          default true;
+        }
+        leaf receive {
+          description "Trace received packets.";
+          type boolean;
+          default true;
+        }
+      }
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/"
+        + "bgp:transport/bgp:secure-session/bgp:options/bgp:option/bgp:md5" {
+    leaf md5-key-string {
+      type string;
+      description
+        "Key string in ASCII format.";
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/bgp:bgp/bgp:global/"
+        + "bgp:afi-safis/bgp:afi-safi/bgp:ipv4-unicast" {
+    list redistribution {
+      key "type";
+      description
+        "Parameters relating to route redistribution for the AFI-SAFI";
+
+      leaf type {
+        type identityref {
+          base rt:control-plane-protocol;
+        }
+        description
+          "Type of the control-plane protocol -- an identity
+           derived from the 'control-plane-protocol'
+           base identity.";
+      }
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/bgp:bgp/bgp:global/"
+        + "bgp:afi-safis/bgp:afi-safi/bgp:ipv6-unicast" {
+    list redistribution {
+      key "type";
+      description
+        "Parameters relating to route redistribution for the AFI-SAFI";
+
+      leaf type {
+        type identityref {
+          base rt:control-plane-protocol;
+        }
+        description
+          "Type of the control-plane protocol -- an identity
+           derived from the 'control-plane-protocol'
+           base identity.";
+      }
+    }
+  }
+}

@@ -1,0 +1,65 @@
+[package]
+name = "holo-isis"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+
+[dependencies]
+arc-swap.workspace = true
+bitflags.workspace = true
+bytes.workspace = true
+chrono.workspace = true
+derive-new.workspace = true
+fletcher.workspace = true
+generational-arena.workspace = true
+hmac.workspace = true
+ipnetwork.workspace = true
+itertools.workspace = true
+libc.workspace = true
+md-5.workspace = true
+nix.workspace = true
+num-derive.workspace = true
+num-traits.workspace = true
+phf.workspace = true
+prefix-trie.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_with.workspace = true
+sha1.workspace = true
+sha2.workspace = true
+smallvec.workspace = true
+socket2.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+yang5.workspace = true
+
+holo-northbound = { path = "../holo-northbound", features = ["isis"] }
+holo-protocol = { path = "../holo-protocol" }
+holo-utils = { path = "../holo-utils" }
+holo-yang = { path = "../holo-yang" }
+
+[dev-dependencies]
+const-addrs.workspace = true
+criterion.workspace = true
+maplit.workspace = true
+yang5 = { workspace = true, features = ["bundled"] }
+
+holo-isis = { path = ".", features = ["testing", "deterministic"] }
+holo-northbound = { path = "../holo-northbound", features = ["testing"] }
+holo-protocol = { path = "../holo-protocol", features = ["testing"] }
+holo-utils = { path = "../holo-utils", features = ["testing"] }
+
+[build-dependencies]
+yang5 = { workspace = true, features = ["bundled"] }
+holo-northbound = { path = "../holo-northbound", features = ["isis"] }
+holo-yang = { path = "../holo-yang" }
+
+[lints]
+workspace = true
+
+[features]
+default = []
+testing = []
+deterministic = []

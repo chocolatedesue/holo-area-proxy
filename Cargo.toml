@@ -1,0 +1,147 @@
+[workspace]
+members = [
+  "holo-bfd",
+  "holo-bgp",
+  "holo-daemon",
+  "holo-igmp",
+  "holo-interface",
+  "holo-isis",
+  "holo-keychain",
+  "holo-ldp",
+  "holo-northbound",
+  "holo-ospf",
+  "holo-policy",
+  "holo-protocol",
+  "holo-rip",
+  "holo-routing",
+  "holo-system",
+  "holo-tools",
+  "holo-tools/holo-replay",
+  "holo-utils",
+  "holo-vrrp",
+  "holo-yang",
+]
+exclude = ["fuzz"]
+default-members = ["holo-daemon"]
+resolver = "2"
+
+[workspace.package]
+version = "0.9.0"
+authors = ["Renato Westphal <renatowestphal@gmail.com>"]
+license = "MIT"
+edition = "2024"
+repository = "https://github.com/holo-routing/holo"
+
+[workspace.dependencies]
+arbitrary = { version = "1.4", features = ["derive"] }
+arc-swap = "1.9"
+base64 = "0.22"
+bitflags = { version = "2.13", features = ["serde"] }
+bytes = { version = "1.12", features = ["serde"] }
+capctl = "0.2"
+check_keyword = "0.4"
+clap = "2.33"
+chrono = { version = "0.4", features = ["serde"] }
+const-addrs = { version = "0.2", features = ["ipnet"] }
+convert_case = "0.11"
+criterion = "0.8"
+crossbeam-channel = "0.5"
+derive-new = "0.7"
+enum-as-inner = "0.7"
+fletcher = "1.0"
+futures = "0.3"
+generational-arena = "0.2"
+hmac = "0.13"
+internet-checksum = "0.2"
+ipnetwork = { version = "0.21", features = ["serde"] }
+itertools = "0.15"
+libc = "0.2"
+maplit = "1.0"
+md-5 = "0.11"
+nix = { version = "0.31", features = ["fs", "net", "socket", "uio", "user"] }
+netlink-packet-core = "0.8"
+netlink-packet-route = "0.30"
+netlink-sys = "0.8"
+num-derive = "0.4"
+num-traits = "0.2"
+phf = { version = "0.14", features = ["macros"] }
+pickledb = "0.5"
+prefix-trie = { version = "0.9", default-features = false, features = ["ipnetwork"]  }
+prost = "0.14"
+rand = { version = "0.10", features = ["thread_rng"] }
+regex = { version = "1.12", default-features = false, features = ["std", "perf"] }
+rtnetlink = "0.21"
+rustc_tools_util = "0.4.2"
+serde = { version = "1.0", features = ["derive", "rc"] }
+serde_json = "1.0"
+serde_with = "3.21"
+sha1 = "0.11"
+sha2 = "0.11"
+similar = "3.1"
+smallvec = { version = "1.15", features = ["serde"] }
+socket2 = { version = "0.6", features = ["all"] }
+sysctl = "0.7"
+tokio = { version = "1.52", features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tonic = { version = "0.14", features = ["tls-ring"] }
+tonic-prost = "0.14"
+tonic-prost-build = "0.14"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+yang5 = { version = "0.3" }
+
+[workspace.lints.rust]
+rust_2018_idioms = { level = "warn", priority = -1 }
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+borrowed_box = "allow"
+field_reassign_with_default = "allow"
+large_enum_variant = "allow"
+manual_range_contains = "allow"
+match_single_binding = "allow"
+result_large_err = "allow"
+single_match = "allow"
+too_many_arguments = "allow"
+
+# Build profile descriptions:
+#
+# release:
+#   Intended for maximum runtime performance.
+#   Enables link-time optimization and uses a single codegen unit to allow
+#   the compiler to perform more aggressive cross-crate and whole-program
+#   optimizations at the cost of longer build times.
+#
+# small:
+#   Intended for minimal binary size.
+#   Builds on the release profile while optimizing for size.
+#
+# dev:
+#   Intended for fast iteration during development.
+#   Uses minimal debug information that preserves line tables for basic
+#   backtraces while keeping compile times low.
+#   Disables debug information for dependencies to further improve build
+#   performance.
+#
+# debugging:
+#   Intended for interactive debugging sessions.
+#   Inherits dev settings but enables full debug symbols to allow detailed
+#   stack traces and variable inspection.
+
+[profile.release]
+lto = true
+codegen-units = 1
+
+[profile.small]
+inherits = "release"
+opt-level = "z"
+strip = true
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
+[profile.debugging]
+inherits = "dev"
+debug = true

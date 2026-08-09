@@ -1,0 +1,814 @@
+//
+// Copyright (c) The Holo Core Contributors
+//
+// SPDX-License-Identifier: MIT
+//
+
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use chrono::{DateTime, Utc};
+use derive_new::new;
+use holo_northbound as northbound;
+use holo_northbound::configuration::{
+    CommitPhase, ConfigChange, Provider, ValidateFn,
+};
+use holo_northbound::{NbDaemonSender, NbProviderReceiver, Path, api as papi};
+use holo_protocol::InstanceShared;
+use holo_utils::task::{Task, TimeoutTask};
+use holo_utils::yang::{ContextExt, SchemaNodeExt};
+use holo_utils::{Database, ibus};
+use holo_yang as yang;
+use holo_yang::YANG_CTX;
+use pickledb::PickleDb;
+use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc::{Receiver, Sender, UnboundedReceiver, UnboundedSender};
+use tokio::sync::{mpsc, oneshot};
+use tracing::{debug, error, info, instrument, trace, warn};
+use yang5::data::{
+    Data, DataDiffFlags, DataFormat, DataPrinterFlags, DataTree,
+    DataValidationFlags,
+};
+
+use crate::config::Config;
+use crate::northbound::client::{api as capi, gnmi, grpc};
+use crate::northbound::{Error, Result, db};
+
+pub struct Northbound {
+    // YANG-modeled running configuration.
+    running_config: Arc<DataTree<'static>>,
+    // Non-volatile storage.
+    db: Database,
+    // Validation functions.
+    validation_fns: Vec<ValidateFn>,
+    // Maps each configuration node to the index of its data provider.
+    provider_paths: HashMap<String, usize>,
+    // List of management interfaces.
+    clients: Vec<Task<()>>,
+    // List of data providers.
+    providers: Vec<NbDaemonSender>,
+    // Channel used to receive messages from the external clients.
+    rx_clients: Receiver<capi::client::Request>,
+    // Channel used to receive messages from the data providers.
+    rx_providers: UnboundedReceiver<papi::provider::Notification>,
+    // Confirmed commit information.
+    confirmed_commit: ConfirmedCommit,
+    // Active notification subscribers.
+    notification_subscribers: Vec<NotificationSubscriber>,
+}
+
+struct NotificationSubscriber {
+    path: Option<String>,
+    tx: UnboundedSender<capi::client::SubscribeNotification>,
+}
+
+#[derive(Debug, new)]
+#[derive(Deserialize, Serialize)]
+pub struct Transaction {
+    // Unique identifier for the transaction.
+    #[new(default)]
+    pub id: u32,
+
+    // Date and time for when the transaction occurred.
+    #[serde(with = "chrono::serde::ts_seconds")]
+    pub date: DateTime<Utc>,
+
+    // Optional comment for the transaction.
+    pub comment: String,
+
+    // Configuration that was committed.
+    #[serde(with = "holo_yang::serde::data_tree")]
+    pub configuration: DataTree<'static>,
+}
+
+#[derive(Debug)]
+pub struct ConfirmedCommit {
+    // Channels used to send and receive timeout notifications.
+    tx: Sender<()>,
+    rx: Receiver<()>,
+
+    // Confirmed commit in progress.
+    rollback: Option<Rollback>,
+}
+
+#[derive(Debug)]
+pub struct Rollback {
+    configuration: DataTree<'static>,
+    #[expect(unused)]
+    timeout: TimeoutTask,
+}
+
+// ===== impl Northbound =====
+
+impl Northbound {
+    pub(crate) async fn init(config: &Config, db: PickleDb) -> Northbound {
+        let db = Arc::new(Mutex::new(db));
+
+        // Create global YANG context.
+        let mut yang_ctx = yang::new_context();
+        yang::load_modules(&mut yang_ctx, &yang::implemented_modules::ALL);
+        yang_ctx.cache_data_paths();
+        YANG_CTX.set(Arc::new(yang_ctx)).unwrap();
+
+        // Create empty running configuration.
+        let yang_ctx = YANG_CTX.get().unwrap();
+        let running_config = Arc::new(DataTree::new(yang_ctx));
+
+        // Start client tasks (e.g. gRPC, gNMI).
+        let (rx_clients, clients) = start_clients(config);
+
+        // Start provider tasks (e.g. interfaces, routing, etc).
+        let (rx_providers, providers, registered_paths, validation_fns) =
+            start_providers(config, db.clone());
+
+        // Resolve the data provider that owns each configuration node.
+        let provider_paths = resolve_provider_paths(&registered_paths);
+
+        Northbound {
+            running_config,
+            db,
+            validation_fns,
+            provider_paths,
+            clients,
+            providers,
+            rx_clients,
+            rx_providers,
+            confirmed_commit: Default::default(),
+            notification_subscribers: Vec::new(),
+        }
+    }
+
+    // Main event loop.
+    #[instrument(skip_all, "northbound")]
+    pub(crate) async fn run(mut self: Northbound, mut signal_rx: Receiver<()>) {
+        loop {
+            tokio::select! {
+                Some(request) = self.rx_clients.recv() => {
+                    self.process_client_msg(request).await;
+                }
+                request = self.rx_providers.recv() => match request {
+                    Some(request) => {
+                        self.process_provider_msg(request);
+                    }
+                    // All providers have exited. Teardown is complete.
+                    None => return,
+                },
+                Some(_) = self.confirmed_commit.rx.recv() => {
+                    self.process_confirmed_commit_timeout().await;
+                }
+                _ = signal_rx.recv() => {
+                    self.rx_clients.close();
+                    self.clients.clear();
+                    self.providers.clear();
+                },
+                else => break,
+            }
+        }
+    }
+
+    // Processes a message received from an external client.
+    async fn process_client_msg(&mut self, request: capi::client::Request) {
+        trace!(?request, "received client request");
+
+        match request {
+            capi::client::Request::GetState(request) => {
+                let response =
+                    self.process_client_get_state(request.path).await;
+                let _ = request.responder.send(response);
+            }
+            capi::client::Request::GetConfig(request) => {
+                let response = self.process_client_get_config(request.path);
+                let _ = request.responder.send(response);
+            }
+            capi::client::Request::Validate(request) => {
+                let response =
+                    self.process_client_validate(request.config).await;
+                if let Err(error) = &response {
+                    warn!(%error, "configuration validation failed");
+                }
+                let _ = request.responder.send(response);
+            }
+            capi::client::Request::Commit(request) => {
+                let response = self
+                    .process_client_commit(
+                        request.config,
+                        request.comment,
+                        request.confirmed_timeout,
+                    )
+                    .await;
+                if let Err(error) = &response {
+                    warn!(%error, "commit failed");
+                }
+                let _ = request.responder.send(response);
+            }
+            capi::client::Request::Execute(request) => {
+                let response = self.process_client_execute(request.data).await;
+                if let Err(error) = &response {
+                    warn!(%error, "execute failed");
+                }
+                let _ = request.responder.send(response);
+            }
+            capi::client::Request::ListTransactions(request) => {
+                let response = self.process_client_list_transactions().await;
+                let _ = request.responder.send(response);
+            }
+            capi::client::Request::GetTransaction(request) => {
+                let response = self
+                    .process_client_get_transaction(request.transaction_id)
+                    .await;
+                let _ = request.responder.send(response);
+            }
+            capi::client::Request::Subscribe(request) => {
+                self.notification_subscribers.push(NotificationSubscriber {
+                    path: request.path,
+                    tx: request.tx,
+                });
+            }
+        }
+    }
+
+    // Processes a `GetState` message received from an external client.
+    async fn process_client_get_state(
+        &self,
+        path: Option<Path>,
+    ) -> Result<capi::client::GetStateResponse> {
+        let dtree = self.get_state(path.as_ref()).await?;
+        Ok(capi::client::GetStateResponse { dtree })
+    }
+
+    // Processes a `GetConfig` message received from an external client.
+    fn process_client_get_config(
+        &self,
+        path: Option<Path>,
+    ) -> Result<capi::client::GetConfigResponse> {
+        let dtree = self.get_configuration(path.as_ref())?;
+        Ok(capi::client::GetConfigResponse { dtree })
+    }
+
+    // Processes a `Validate` message received from an external client.
+    async fn process_client_validate(
+        &mut self,
+        candidate: DataTree<'static>,
+    ) -> Result<capi::client::ValidateResponse> {
+        let candidate = Arc::new(candidate);
+
+        // Validate the candidate configuration.
+        northbound::configuration::validate(&self.validation_fns, &candidate)
+            .map_err(Error::TransactionValidation)?;
+
+        Ok(capi::client::ValidateResponse {})
+    }
+
+    // Processes a `Commit` message received from an external client.
+    async fn process_client_commit(
+        &mut self,
+        config: capi::CommitConfiguration,
+        comment: String,
+        confirmed_timeout: u32,
+    ) -> Result<capi::client::CommitResponse> {
+        // Handle different commit operations.
+        let candidate = match config {
+            capi::CommitConfiguration::Merge(config) => {
+                let mut candidate = self
+                    .running_config
+                    .duplicate()
+                    .map_err(Error::YangInternal)?;
+                candidate.merge(&config).map_err(Error::YangInternal)?;
+                candidate
+            }
+            capi::CommitConfiguration::Replace(config) => config,
+            capi::CommitConfiguration::Change(diff) => {
+                let mut candidate = self
+                    .running_config
+                    .duplicate()
+                    .map_err(Error::YangInternal)?;
+                candidate.diff_apply(&diff).map_err(Error::YangInternal)?;
+                candidate
+            }
+        };
+
+        // Create configuration transaction.
+        let transaction_id = self
+            .create_transaction(candidate, comment, confirmed_timeout)
+            .await?;
+        Ok(capi::client::CommitResponse { transaction_id })
+    }
+
+    // Processes an `Execute` message received from an external client.
+    async fn process_client_execute(
+        &mut self,
+        data: DataTree<'static>,
+    ) -> Result<capi::client::ExecuteResponse> {
+        let data = self.execute(data).await?;
+        Ok(capi::client::ExecuteResponse { data })
+    }
+
+    // Processes a `ListTransactions` message received from an external client.
+    async fn process_client_list_transactions(
+        &mut self,
+    ) -> Result<capi::client::ListTransactionsResponse> {
+        let db = self.db.lock().unwrap();
+        let transactions = db::transaction_get_all(&db);
+        Ok(capi::client::ListTransactionsResponse { transactions })
+    }
+
+    // Processes a `GetTransaction` message received from an external client.
+    async fn process_client_get_transaction(
+        &mut self,
+        transaction_id: u32,
+    ) -> Result<capi::client::GetTransactionResponse> {
+        let db = self.db.lock().unwrap();
+        let transaction = db::transaction_get(&db, transaction_id)
+            .ok_or(Error::TransactionIdNotFound(transaction_id))?;
+        Ok(capi::client::GetTransactionResponse {
+            dtree: transaction.configuration,
+        })
+    }
+
+    // Processes a message received from a data provider.
+    fn process_provider_msg(
+        &mut self,
+        notification: papi::provider::Notification,
+    ) {
+        debug!(path = %notification.path, "received YANG notification");
+
+        self.notification_subscribers.retain(|subscriber| {
+            // Filter by path prefix if specified.
+            if let Some(filter_path) = &subscriber.path
+                && !notification.path.starts_with(filter_path.as_str())
+            {
+                return true;
+            }
+
+            // Duplicate the data tree for this subscriber.
+            let data = match notification.data.duplicate() {
+                Ok(data) => data,
+                Err(error) => {
+                    error!(%error, "failed to duplicate notification data");
+                    return true;
+                }
+            };
+
+            let msg = capi::client::SubscribeNotification {
+                path: notification.path.clone(),
+                data,
+            };
+
+            // If send fails, the subscriber has disconnected.
+            subscriber.tx.send(msg).is_ok()
+        });
+    }
+
+    // Processes a confirmed commit timeout.
+    async fn process_confirmed_commit_timeout(&mut self) {
+        info!(
+            "confirmed commit has timed out, rolling back to previous configuration"
+        );
+
+        let comment = "Confirmed commit rollback".to_owned();
+        let rollback = self.confirmed_commit.rollback.take().unwrap();
+        if let Err(error) = self
+            .create_transaction(rollback.configuration, comment, 0)
+            .await
+        {
+            error!(%error, "failed to rollback to previous configuration");
+        }
+    }
+
+    // Creates a configuration transaction using a two-phase commit protocol. In
+    // case of success, the transaction ID is returned.
+    //
+    // A configuration transaction might fail if the candidate configuration
+    // fails to be validated, or if one or more resources fail to be allocated.
+    async fn create_transaction(
+        &mut self,
+        candidate: DataTree<'static>,
+        comment: String,
+        confirmed_timeout: u32,
+    ) -> Result<u32> {
+        let candidate = Arc::new(candidate);
+
+        // Validate the candidate configuration.
+        northbound::configuration::validate(&self.validation_fns, &candidate)
+            .map_err(Error::TransactionValidation)?;
+
+        // Compute diff between the running config and the candidate config.
+        let diff = self
+            .running_config
+            .diff(&candidate, DataDiffFlags::DEFAULTS)
+            .map_err(Error::YangInternal)?;
+
+        // Check if the configuration has changed.
+        if diff.iter().next().is_none() {
+            // Check if this a confirmation commit.
+            if self.confirmed_commit.rollback.take().is_some() {
+                debug!("commit confirmation accepted");
+            }
+
+            return Ok(0);
+        }
+
+        // Get list of configuration changes.
+        let changes = northbound::configuration::changes_from_diff(&diff);
+
+        // Log configuration transaction.
+        let changes_json = diff
+            .print_string(DataFormat::JSON, DataPrinterFlags::WITH_SIBLINGS)
+            .unwrap();
+        debug!(%confirmed_timeout, changes = %changes_json, "configuration transaction");
+
+        // Phase 1: validate configuration and attempt to prepare resources for
+        // the transaction.
+        match self
+            .commit_phase_notify(CommitPhase::Prepare, &candidate, &changes)
+            .await
+        {
+            Ok(_) => {
+                // Phase 2: apply the configuration changes.
+                let _ = self
+                    .commit_phase_notify(
+                        CommitPhase::Apply,
+                        &candidate,
+                        &changes,
+                    )
+                    .await;
+
+                // Start confirmed commit timeout if necessary.
+                if confirmed_timeout > 0 {
+                    let rollback_config =
+                        (*self.running_config).duplicate().unwrap();
+                    self.confirmed_commit
+                        .start(rollback_config, confirmed_timeout);
+                }
+
+                // Update the running configuration.
+                let running_config =
+                    Arc::get_mut(&mut self.running_config).unwrap();
+                running_config
+                    .diff_apply(&diff)
+                    .map_err(Error::YangInternal)?;
+                running_config
+                    .validate(DataValidationFlags::NO_STATE)
+                    .map_err(Error::YangInternal)?;
+
+                // Create transaction structure.
+                let candidate = Arc::try_unwrap(candidate).unwrap();
+                let mut transaction =
+                    Transaction::new(Utc::now(), comment, candidate);
+
+                // Record transaction.
+                let mut db = self.db.lock().unwrap();
+                db::transaction_record(&mut db, &mut transaction);
+
+                Ok(transaction.id)
+            }
+            Err(error) => {
+                // Phase 2: abort the configuration changes.
+                let _ = self
+                    .commit_phase_notify(
+                        CommitPhase::Abort,
+                        &candidate,
+                        &changes,
+                    )
+                    .await;
+
+                Err(Error::TransactionPreparation(error))
+            }
+        }
+    }
+
+    // Notifies all data providers of the configuration changes associated to an
+    // on-going transaction.
+    async fn commit_phase_notify(
+        &mut self,
+        phase: CommitPhase,
+        candidate: &Arc<DataTree<'static>>,
+        changes: &[ConfigChange],
+    ) -> std::result::Result<(), northbound::error::Error> {
+        // Batch the changes that should be sent to each data provider.
+        let mut batches = vec![Vec::new(); self.providers.len()];
+        for (change_key, data_path) in changes {
+            if let Some(index) = self.provider_paths.get(&change_key.path)
+                && let Some(batch) = batches.get_mut(*index)
+            {
+                batch.push((change_key.clone(), data_path.clone()));
+            }
+        }
+
+        // Spawn one task per data provider.
+        for (daemon_tx, changes) in self.providers.iter().zip(batches) {
+            // Prepare request.
+            let (responder_tx, responder_rx) = oneshot::channel();
+            let request =
+                papi::daemon::Request::Commit(papi::daemon::CommitRequest {
+                    phase,
+                    old_config: self.running_config.clone(),
+                    new_config: candidate.clone(),
+                    changes,
+                    responder: Some(responder_tx),
+                });
+
+            // Spawn task to send the request and receive the response.
+            let daemon_tx = daemon_tx.clone();
+            let handle = tokio::spawn(async move {
+                daemon_tx.send(request).await.unwrap();
+                responder_rx.await.unwrap()
+            });
+
+            // Wait for task to complete.
+            handle.await.unwrap()?;
+        }
+
+        Ok(())
+    }
+
+    // Gets a full or partial copy of the running configuration.
+    fn get_configuration(
+        &self,
+        path: Option<&Path>,
+    ) -> Result<DataTree<'static>> {
+        match path {
+            Some(path) => {
+                let yang_ctx = YANG_CTX.get().unwrap();
+                let mut dtree = DataTree::new(yang_ctx);
+                for dnode in self
+                    .running_config
+                    .find_xpath(&path.to_string())
+                    .map_err(Error::YangInvalidPath)?
+                {
+                    let subtree =
+                        dnode.duplicate(true).map_err(Error::YangInternal)?;
+                    dtree.merge(&subtree).map_err(Error::YangInternal)?;
+                }
+                Ok(dtree)
+            }
+            None => {
+                self.running_config.duplicate().map_err(Error::YangInternal)
+            }
+        }
+    }
+
+    // Gets dynamically generated operational data for the provided path. The
+    // request might span multiple data providers.
+    async fn get_state(
+        &self,
+        path: Option<&Path>,
+    ) -> Result<DataTree<'static>> {
+        let yang_ctx = YANG_CTX.get().unwrap();
+        let mut dtree = DataTree::new(yang_ctx);
+
+        for daemon_tx in self.providers.iter() {
+            // Prepare request.
+            let (responder_tx, responder_rx) = oneshot::channel();
+            let request =
+                papi::daemon::Request::Get(papi::daemon::GetRequest {
+                    path: path.cloned(),
+                    responder: Some(responder_tx),
+                });
+            daemon_tx.send(request).await.unwrap();
+
+            // Receive response.
+            let response = responder_rx.await.unwrap().map_err(Error::Get)?;
+
+            // Combine all responses into a single data tree.
+            dtree.merge(&response.data).map_err(Error::YangInternal)?;
+        }
+
+        Ok(dtree)
+    }
+
+    // Invoke a YANG RPC or Action.
+    async fn execute(
+        &self,
+        data: DataTree<'static>,
+    ) -> Result<DataTree<'static>> {
+        let yang_ctx = YANG_CTX.get().unwrap();
+        let mut dtree = DataTree::new(yang_ctx);
+
+        // Log RPC invocation with full JSON-encoded request data.
+        let data_json = data
+            .print_string(DataFormat::JSON, DataPrinterFlags::WITH_SIBLINGS)
+            .unwrap();
+        debug!(data = %data_json, "RPC invocation received");
+
+        for daemon_tx in self.providers.iter() {
+            // Prepare request.
+            let (responder_tx, responder_rx) = oneshot::channel();
+            let request =
+                papi::daemon::Request::Rpc(papi::daemon::RpcRequest {
+                    data: data.duplicate().map_err(Error::YangInternal)?,
+                    responder: Some(responder_tx),
+                });
+            daemon_tx.send(request).await.unwrap();
+
+            // Receive response.
+            let response = responder_rx.await.unwrap().unwrap();
+
+            // Combine all responses into a single data tree.
+            dtree.merge(&response.data).map_err(Error::YangInternal)?;
+        }
+
+        Ok(dtree)
+    }
+}
+
+// ===== impl ConfirmedCommit =====
+
+impl ConfirmedCommit {
+    fn start(&mut self, configuration: DataTree<'static>, timeout: u32) {
+        debug!(%timeout, "starting confirmed commit timeout");
+
+        let timeout = self.timeout_task(timeout);
+
+        self.rollback = Some(Rollback {
+            configuration,
+            timeout,
+        });
+    }
+
+    fn timeout_task(&self, timeout: u32) -> TimeoutTask {
+        let tx = self.tx.clone();
+        let timeout = Duration::from_secs(timeout as u64 * 60);
+        TimeoutTask::new(timeout, move || async move {
+            let _ = tx.send(()).await;
+        })
+    }
+}
+
+impl Default for ConfirmedCommit {
+    fn default() -> ConfirmedCommit {
+        let (tx, rx) = mpsc::channel(4);
+
+        ConfirmedCommit {
+            tx,
+            rx,
+            rollback: None,
+        }
+    }
+}
+
+// ===== helper functions =====
+
+// Starts base data providers.
+#[allow(unused_mut, unused_variables)]
+fn start_providers(
+    config: &Config,
+    db: Database,
+) -> (
+    NbProviderReceiver,
+    Vec<NbDaemonSender>,
+    HashMap<String, usize>,
+    Vec<ValidateFn>,
+) {
+    let mut providers = Vec::new();
+    let mut registered_paths = HashMap::new();
+    let mut validation_fns = Vec::new();
+    let (provider_tx, provider_rx) = mpsc::unbounded_channel();
+    let (ibus_tx, ibus_rx) = ibus::ibus_channels();
+    let shared = InstanceShared {
+        db: Some(db),
+        event_recorder_config: Some(config.event_recorder.clone()),
+        ..Default::default()
+    };
+
+    // Start holo-interface.
+    #[cfg(feature = "interface")]
+    {
+        let daemon_tx = holo_interface::start(
+            provider_tx.clone(),
+            &ibus_tx,
+            ibus_rx.interface,
+            shared.clone(),
+        );
+        register_provider::<holo_interface::Master>(
+            providers.len(),
+            &mut registered_paths,
+            &mut validation_fns,
+        );
+        providers.push(daemon_tx);
+    }
+
+    // Start holo-keychain.
+    #[cfg(feature = "keychain")]
+    {
+        let daemon_tx = holo_keychain::start(
+            provider_tx.clone(),
+            &ibus_tx,
+            ibus_rx.keychain,
+        );
+        register_provider::<holo_keychain::Master>(
+            providers.len(),
+            &mut registered_paths,
+            &mut validation_fns,
+        );
+        providers.push(daemon_tx);
+    }
+
+    // Start holo-policy.
+    #[cfg(feature = "policy")]
+    {
+        let daemon_tx =
+            holo_policy::start(provider_tx.clone(), &ibus_tx, ibus_rx.policy);
+        register_provider::<holo_policy::Master>(
+            providers.len(),
+            &mut registered_paths,
+            &mut validation_fns,
+        );
+        providers.push(daemon_tx);
+    }
+
+    // Start holo-system.
+    #[cfg(feature = "system")]
+    {
+        let daemon_tx =
+            holo_system::start(provider_tx.clone(), &ibus_tx, ibus_rx.system);
+        register_provider::<holo_system::Master>(
+            providers.len(),
+            &mut registered_paths,
+            &mut validation_fns,
+        );
+        providers.push(daemon_tx);
+    }
+
+    // Start holo-routing.
+    #[cfg(feature = "routing")]
+    {
+        let daemon_tx =
+            holo_routing::start(provider_tx, &ibus_tx, ibus_rx.routing, shared);
+        register_provider::<holo_routing::Master>(
+            providers.len(),
+            &mut registered_paths,
+            &mut validation_fns,
+        );
+        providers.push(daemon_tx);
+    }
+
+    (provider_rx, providers, registered_paths, validation_fns)
+}
+
+// Starts external clients.
+fn start_clients(
+    config: &Config,
+) -> (Receiver<capi::client::Request>, Vec<Task<()>>) {
+    let mut clients = Vec::new();
+    let (client_tx, daemon_rx) = mpsc::channel(4);
+
+    // Spawn gRPC task.
+    let grpc_config = &config.plugins.grpc;
+    if grpc_config.enabled {
+        let client = grpc::start(grpc_config, client_tx.clone());
+        clients.push(client);
+    }
+
+    // Spawn gNMI task.
+    let gnmi_config = &config.plugins.gnmi;
+    if gnmi_config.enabled {
+        let client = gnmi::start(gnmi_config, client_tx);
+        clients.push(client);
+    }
+
+    (daemon_rx, clients)
+}
+
+// Registers the YANG paths and validation functions of a data provider.
+fn register_provider<P: Provider>(
+    index: usize,
+    registered_paths: &mut HashMap<String, usize>,
+    validation_fns: &mut Vec<ValidateFn>,
+) {
+    for path in P::YANG_OPS_CONFIG.paths() {
+        registered_paths.insert(path.to_owned(), index);
+    }
+
+    validation_fns.extend(P::validation_fns());
+}
+
+// Maps each configuration node to the data provider that owns it.
+//
+// Nodes owned by nested providers (e.g. routing protocol instances) are mapped
+// to the provider owning their closest registered ancestor, which relays the
+// configuration to the appropriate child instance.
+fn resolve_provider_paths(
+    registered_paths: &HashMap<String, usize>,
+) -> HashMap<String, usize> {
+    let yang_ctx = YANG_CTX.get().unwrap();
+    let mut provider_paths = HashMap::new();
+
+    for snode in yang_ctx.traverse().filter(|snode| snode.is_config()) {
+        let path = snode.data_path();
+        let mut ancestor = path.as_str();
+        loop {
+            if let Some(index) = registered_paths.get(ancestor) {
+                provider_paths.insert(path.clone(), *index);
+                break;
+            }
+            let Some(index) = ancestor.rfind('/') else {
+                break;
+            };
+            ancestor = &ancestor[..index];
+        }
+    }
+
+    provider_paths
+}

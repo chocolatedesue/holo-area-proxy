@@ -1,0 +1,73 @@
+module holo-ietf-ip-deviations {
+  yang-version 1.1;
+  namespace "http://holo-routing.org/yang/holo-ietf-ip-deviations";
+  prefix holo-ietf-ip-deviations;
+
+  import ietf-interfaces {
+    prefix if;
+  }
+
+  import ietf-ip {
+    prefix ip;
+  }
+
+  organization
+    "Holo Routing Stack";
+
+  description
+    "This module defines deviation statements for the ietf-ip
+     module.";
+
+  /*
+   * Added constraints
+   */
+
+  deviation "/if:interfaces/if:interface/ip:ipv4/ip:mtu" {
+    deviate add {
+      must 'not(../../ip:ipv6/ip:mtu) or . = ../../ip:ipv6/ip:mtu' {
+        error-message
+          "The IPv4 and IPv6 MTUs must be the same.";
+      }
+    }
+  }
+
+  /*
+   * Not supported nodes
+   */
+
+  deviation "/if:interfaces/if:interface/ip:ipv4/ip:forwarding" {
+    deviate not-supported;
+  }
+
+  deviation "/if:interfaces/if:interface/ip:ipv4/ip:address/ip:origin" {
+    deviate not-supported;
+  }
+
+  deviation "/if:interfaces/if:interface/ip:ipv4/ip:neighbor" {
+    deviate not-supported;
+  }
+
+  deviation "/if:interfaces/if:interface/ip:ipv6/ip:forwarding" {
+    deviate not-supported;
+  }
+
+  deviation "/if:interfaces/if:interface/ip:ipv6/ip:address/ip:origin" {
+    deviate not-supported;
+  }
+
+  deviation "/if:interfaces/if:interface/ip:ipv6/ip:address/ip:status" {
+    deviate not-supported;
+  }
+
+  deviation "/if:interfaces/if:interface/ip:ipv6/ip:neighbor" {
+    deviate not-supported;
+  }
+
+  deviation "/if:interfaces/if:interface/ip:ipv6/ip:dup-addr-detect-transmits" {
+    deviate not-supported;
+  }
+
+  deviation "/if:interfaces/if:interface/ip:ipv6/ip:autoconf" {
+    deviate not-supported;
+  }
+}

@@ -1,0 +1,66 @@
+module holo-ietf-segment-routing-mpls-deviations {
+  yang-version 1.1;
+  namespace "http://holo-routing.org/yang/holo-ietf-segment-routing-mpls-deviations";
+  prefix holo-ietf-segment-routing-mpls-deviations;
+
+  import ietf-routing {
+    prefix rt;
+  }
+
+  import ietf-segment-routing {
+    prefix sr;
+  }
+
+  import ietf-segment-routing-mpls {
+    prefix sr-mpls;
+  }
+
+  organization
+    "Holo Routing Stack";
+
+  description
+    "This module defines deviation statements for the ietf-segment-routing-mpls
+     module.";
+
+  /*
+   * Default values
+   */
+
+  deviation "/rt:routing/sr:segment-routing/sr-mpls:sr-mpls/sr-mpls:bindings/sr-mpls:connected-prefix-sid-map/sr-mpls:connected-prefix-sid/sr-mpls:last-hop-behavior" {
+    deviate add {
+      default "php";
+    }
+  }
+
+  /*
+   * Not supported nodes
+   */
+
+  deviation "/sr-mpls:segment-routing-srgb-collision" {
+    deviate not-supported;
+  }
+
+  deviation "/sr-mpls:segment-routing-global-sid-collision" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/sr:segment-routing/sr-mpls:sr-mpls/sr-mpls:bindings/sr-mpls:connected-prefix-sid-map/sr-mpls:connected-prefix-sid/sr-mpls:value-type" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/sr:segment-routing/sr-mpls:sr-mpls/sr-mpls:bindings/sr-mpls:connected-prefix-sid-map/sr-mpls:connected-prefix-sid/sr-mpls:range" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/sr:segment-routing/sr-mpls:sr-mpls/sr-mpls:bindings/sr-mpls:local-prefix-sid" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/sr:segment-routing/sr-mpls:sr-mpls/sr-mpls:label-blocks" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/sr:segment-routing/sr-mpls:sr-mpls/sr-mpls:sid-db" {
+    deviate not-supported;
+  }
+}

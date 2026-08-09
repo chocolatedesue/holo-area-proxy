@@ -1,0 +1,213 @@
+//
+// Copyright (c) The Holo Core Contributors
+//
+// SPDX-License-Identifier: MIT
+//
+
+use std::borrow::Cow;
+use std::sync::atomic;
+
+use holo_northbound::state::{ListIterator, Provider, YangContainer, YangList, YangOps};
+use holo_utils::bfd::{PathType, State};
+use holo_utils::num::SaturatingInto;
+use holo_utils::option::OptionExt;
+use holo_utils::protocol::Protocol;
+use holo_yang::ToYang;
+use num_traits::FromPrimitive;
+
+use crate::master::Master;
+use crate::network;
+use crate::northbound::yang_gen::{self, bfd};
+use crate::packet::DiagnosticCode;
+use crate::session::Session;
+
+impl Provider for Master {
+    type ListEntry<'a> = yang_gen::ops::ListEntry<'a>;
+    const YANG_OPS: YangOps<Self> = yang_gen::ops::YANG_OPS_STATE;
+
+    fn top_level_node(&self) -> String {
+        format!("/ietf-routing:routing/control-plane-protocols/control-plane-protocol[type='{}'][name='main']/ietf-bfd:bfd", Protocol::BFD.to_yang(),)
+    }
+}
+
+// ===== YANG impls =====
+
+impl<'a> YangContainer<'a, Master> for bfd::summary::Summary {
+    type ParentListEntry = ();
+
+    fn new(master: &'a Master, _: &Self::ParentListEntry) -> Option<Self> {
+        Some(Self {
+            number_of_sessions: Some(master.sessions_count(None, None).saturating_into()),
+            number_of_sessions_up: Some(master.sessions_count(None, Some(State::Up)).saturating_into()),
+            number_of_sessions_down: Some(master.sessions_count(None, Some(State::Down)).saturating_into()),
+            number_of_sessions_admin_down: Some(master.sessions_count(None, Some(State::AdminDown)).saturating_into()),
+        })
+    }
+}
+
+impl<'a> YangContainer<'a, Master> for bfd::ip_mh::summary::Summary {
+    type ParentListEntry = ();
+
+    fn new(master: &'a Master, _: &Self::ParentListEntry) -> Option<Self> {
+        let path_type = Some(PathType::IpMultihop);
+        Some(Self {
+            number_of_sessions: Some(master.sessions_count(path_type, None).saturating_into()),
+            number_of_sessions_up: Some(master.sessions_count(path_type, Some(State::Up)).saturating_into()),
+            number_of_sessions_down: Some(master.sessions_count(path_type, Some(State::Down)).saturating_into()),
+            number_of_sessions_admin_down: Some(master.sessions_count(path_type, Some(State::AdminDown)).saturating_into()),
+        })
+    }
+}
+
+impl<'a> YangList<'a, Master> for bfd::ip_mh::session_groups::session_group::SessionGroup {
+    type ParentListEntry = ();
+    type ListEntry = &'a Session;
+
+    fn iter(master: &'a Master, _: &Self::ParentListEntry) -> Option<impl ListIterator<'a, Self::ListEntry>> {
+        let iter = master.sessions.iter().filter(|sess| sess.key.is_ip_multihop());
+        Some(iter)
+    }
+
+    fn new(_master: &'a Master, sess: &Self::ListEntry) -> Self {
+        let (src, dst) = sess.key.as_ip_multihop().unwrap();
+        Self {
+            source_addr: *src,
+            dest_addr: *dst,
+        }
+    }
+}
+
+impl<'a> YangList<'a, Master> for bfd::ip_mh::session_groups::session_group::sessions::Sessions {
+    type ParentListEntry = &'a Session;
+    type ListEntry = &'a Session;
+
+    fn iter(_master: &'a Master, sess: &Self::ParentListEntry) -> Option<impl ListIterator<'a, Self::ListEntry>> {
+        let iter = std::iter::once(*sess);
+        Some(iter)
+    }
+
+    fn new(_master: &'a Master, sess: &Self::ListEntry) -> Self {
+        Self {
+            path_type: Some(sess.key.path_type()),
+            ip_encapsulation: Some(true),
+            local_discriminator: Some(sess.state.local_discr),
+            remote_discriminator: sess.state.remote.as_ref().map(|remote| remote.discr),
+            remote_multiplier: sess.state.remote.as_ref().map(|remote| remote.multiplier),
+            source_port: Some(*network::PORT_SRC_RANGE.start()).ignore_in_testing(),
+            dest_port: Some(network::PORT_DST_MULTIHOP).ignore_in_testing(),
+        }
+    }
+}
+
+impl<'a> YangContainer<'a, Master> for bfd::ip_mh::session_groups::session_group::sessions::session_running::SessionRunning<'a> {
+    type ParentListEntry = &'a Session;
+
+    fn new(_master: &'a Master, sess: &Self::ParentListEntry) -> Option<Self> {
+        Some(Self {
+            session_index: Some(sess.id as u32),
+            local_state: Some(sess.state.local_state),
+            remote_state: sess.state.remote.as_ref().map(|remote| remote.state),
+            local_diagnostic: Some(sess.state.local_diag),
+            remote_diagnostic: sess.state.remote.as_ref().map(|remote| remote.diag).and_then(DiagnosticCode::from_u8),
+            remote_authenticated: Some(false),
+            detection_mode: Some("async-without-echo".into()),
+            negotiated_tx_interval: sess.negotiated_tx_interval(),
+            negotiated_rx_interval: sess.negotiated_rx_interval(),
+            detection_time: sess.detection_time(),
+        })
+    }
+}
+
+impl<'a> YangContainer<'a, Master> for bfd::ip_mh::session_groups::session_group::sessions::session_statistics::SessionStatistics {
+    type ParentListEntry = &'a Session;
+
+    fn new(_master: &'a Master, sess: &Self::ParentListEntry) -> Option<Self> {
+        Some(Self {
+            create_time: Some(sess.statistics.create_time).ignore_in_testing(),
+            last_down_time: sess.statistics.last_down_time.ignore_in_testing(),
+            last_up_time: sess.statistics.last_up_time.ignore_in_testing(),
+            down_count: Some(sess.statistics.down_count).ignore_in_testing(),
+            admin_down_count: Some(sess.statistics.admin_down_count).ignore_in_testing(),
+            receive_packet_count: Some(sess.statistics.rx_packet_count).ignore_in_testing(),
+            send_packet_count: Some(sess.statistics.tx_packet_count.load(atomic::Ordering::Relaxed)).ignore_in_testing(),
+            receive_invalid_packet_count: Some(sess.statistics.rx_error_count).ignore_in_testing(),
+            send_failed_packet_count: Some(sess.statistics.tx_error_count.load(atomic::Ordering::Relaxed)).ignore_in_testing(),
+        })
+    }
+}
+
+impl<'a> YangContainer<'a, Master> for bfd::ip_sh::summary::Summary {
+    type ParentListEntry = ();
+
+    fn new(master: &'a Master, _: &Self::ParentListEntry) -> Option<Self> {
+        let path_type = Some(PathType::IpSingleHop);
+        Some(Self {
+            number_of_sessions: Some(master.sessions_count(path_type, None).saturating_into()),
+            number_of_sessions_up: Some(master.sessions_count(path_type, Some(State::Up)).saturating_into()),
+            number_of_sessions_down: Some(master.sessions_count(path_type, Some(State::Down)).saturating_into()),
+            number_of_sessions_admin_down: Some(master.sessions_count(path_type, Some(State::AdminDown)).saturating_into()),
+        })
+    }
+}
+
+impl<'a> YangList<'a, Master> for bfd::ip_sh::sessions::session::Session<'a> {
+    type ParentListEntry = ();
+    type ListEntry = &'a Session;
+
+    fn iter(master: &'a Master, _: &Self::ParentListEntry) -> Option<impl ListIterator<'a, Self::ListEntry>> {
+        let iter = master.sessions.iter().filter(|sess| sess.key.is_ip_single_hop());
+        Some(iter)
+    }
+
+    fn new(_master: &'a Master, sess: &Self::ListEntry) -> Self {
+        let (ifname, dst) = sess.key.as_ip_single_hop().unwrap();
+        Self {
+            interface: Cow::Borrowed(ifname),
+            dest_addr: *dst,
+            path_type: Some(sess.key.path_type()),
+            ip_encapsulation: Some(true),
+            local_discriminator: Some(sess.state.local_discr),
+            remote_discriminator: sess.state.remote.as_ref().map(|remote| remote.discr),
+            remote_multiplier: sess.state.remote.as_ref().map(|remote| remote.multiplier),
+            source_port: Some(*network::PORT_SRC_RANGE.start()).ignore_in_testing(),
+            dest_port: Some(network::PORT_DST_SINGLE_HOP).ignore_in_testing(),
+        }
+    }
+}
+
+impl<'a> YangContainer<'a, Master> for bfd::ip_sh::sessions::session::session_running::SessionRunning<'a> {
+    type ParentListEntry = &'a Session;
+
+    fn new(_master: &'a Master, sess: &Self::ParentListEntry) -> Option<Self> {
+        Some(Self {
+            session_index: Some(sess.id as u32),
+            local_state: Some(sess.state.local_state),
+            remote_state: sess.state.remote.as_ref().map(|remote| remote.state),
+            local_diagnostic: Some(sess.state.local_diag),
+            remote_diagnostic: sess.state.remote.as_ref().map(|remote| remote.diag).and_then(DiagnosticCode::from_u8),
+            remote_authenticated: Some(false),
+            detection_mode: Some("async-without-echo".into()),
+            negotiated_tx_interval: sess.negotiated_tx_interval(),
+            negotiated_rx_interval: sess.negotiated_rx_interval(),
+            detection_time: sess.detection_time(),
+        })
+    }
+}
+
+impl<'a> YangContainer<'a, Master> for bfd::ip_sh::sessions::session::session_statistics::SessionStatistics {
+    type ParentListEntry = &'a Session;
+
+    fn new(_master: &'a Master, sess: &Self::ParentListEntry) -> Option<Self> {
+        Some(Self {
+            create_time: Some(sess.statistics.create_time).ignore_in_testing(),
+            last_down_time: sess.statistics.last_down_time.ignore_in_testing(),
+            last_up_time: sess.statistics.last_up_time.ignore_in_testing(),
+            down_count: Some(sess.statistics.down_count).ignore_in_testing(),
+            admin_down_count: Some(sess.statistics.admin_down_count).ignore_in_testing(),
+            receive_packet_count: Some(sess.statistics.rx_packet_count).ignore_in_testing(),
+            send_packet_count: Some(sess.statistics.tx_packet_count.load(atomic::Ordering::Relaxed)).ignore_in_testing(),
+            receive_invalid_packet_count: Some(sess.statistics.rx_error_count).ignore_in_testing(),
+            send_failed_packet_count: Some(sess.statistics.tx_error_count.load(atomic::Ordering::Relaxed)).ignore_in_testing(),
+        })
+    }
+}

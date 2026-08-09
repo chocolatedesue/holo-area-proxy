@@ -1,0 +1,1077 @@
+//
+// Copyright (c) The Holo Core Contributors
+//
+// SPDX-License-Identifier: MIT
+//
+// Sponsored by NLnet as part of the Next Generation Internet initiative.
+// See: https://nlnet.nl/NGI0
+//
+
+use std::sync::LazyLock as Lazy;
+
+use const_addrs::{ip4, ip6, net4, net6};
+use holo_isis::packet::iana::{AslaSabmFlags, FadFlags, FloodingAlgo};
+use holo_isis::packet::pdu::{Lsp, LspFlags, LspTlvs, Pdu};
+use holo_isis::packet::subtlvs::MsdStlv;
+use holo_isis::packet::subtlvs::capability::{
+    ExcludeSrlgsStlv, FadFlagsStlv, FadStlv, FadStlvs, FapmStlv,
+    FloodingAlgoStlv, LabelBlockEntry, NodeAdminTagStlv, SrAlgoStlv,
+    SrCapabilitiesFlags, SrCapabilitiesStlv, SrLocalBlockStlv,
+};
+use holo_isis::packet::subtlvs::neighbor::{
+    AdjSidFlags, AdjSidStlv, AdminGroupStlv, AslaStlv, AslaStlvs,
+    ExtAdminGroupStlv, Ipv4InterfaceAddrStlv, Ipv4NeighborAddrStlv,
+    MaxLinkBwStlv, MaxResvLinkBwStlv, MinMaxUniLinkDelayFlags,
+    MinMaxUniLinkDelayStlv, TeDefaultMetricStlv, UniAvailBwStlv,
+    UniDelayVariationStlv, UniLinkDelayFlags, UniLinkDelayStlv,
+    UniLinkLossFlags, UniLinkLossStlv, UniResidualBwStlv, UniUtilBwStlv,
+    UnreservedBwStlv,
+};
+use holo_isis::packet::subtlvs::prefix::{
+    Ipv4SourceRidStlv, Ipv6SourceRidStlv, PrefixAttrFlags, PrefixAttrFlagsStlv,
+    PrefixSidFlags, PrefixSidStlv,
+};
+use holo_isis::packet::subtlvs::spb::{IsidEntry, IsidFlags, SpbmSiStlv};
+use holo_isis::packet::tlv::{
+    AreaAddressesTlv, DynamicHostnameTlv, Ipv4AddressesTlv, Ipv4Reach,
+    Ipv4ReachStlvs, Ipv4ReachTlv, Ipv4RouterIdTlv, Ipv6AddressesTlv, Ipv6Reach,
+    Ipv6ReachStlvs, Ipv6ReachTlv, Ipv6RouterIdTlv, IsReach, IsReachStlvs,
+    IsReachTlv, LegacyIpv4Reach, LegacyIpv4ReachTlv, LegacyIsReach,
+    LegacyIsReachTlv, LspBufferSizeTlv, MtCapStlvs, MtCapabilityTlv, MtFlags,
+    MultiTopologyEntry, MultiTopologyTlv, ProtocolsSupportedTlv,
+    PurgeOriginatorIdTlv, RouterCapFlags, RouterCapStlvs, RouterCapTlv,
+};
+use holo_isis::packet::{AreaAddr, LanId, LevelNumber, LspId, SystemId};
+use holo_utils::keychain::Key;
+use holo_utils::mpls::Label;
+use holo_utils::sr::{IgpAlgoType, Sid};
+use maplit::btreemap;
+
+use super::{KEY_HMAC_MD5, KEY_HMAC_SHA256, test_decode_pdu, test_encode_pdu};
+
+//
+// Test packets.
+//
+
+static LSP1: Lazy<(Vec<u8>, Option<&Key>, Pdu)> = Lazy::new(|| {
+    (
+        vec![
+            0x83, 0x1b, 0x01, 0x00, 0x12, 0x01, 0x00, 0x00, 0x01, 0xd8, 0x04,
+            0x92, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x04, 0x40, 0x36, 0x01, 0x81, 0x01, 0xcc, 0xf2, 0x52, 0x01,
+            0x01, 0x01, 0x01, 0x00, 0x02, 0x09, 0xc0, 0x00, 0x1f, 0x40, 0x01,
+            0x03, 0x00, 0x3e, 0x80, 0x13, 0x01, 0x00, 0x16, 0x09, 0x00, 0x00,
+            0x03, 0xe8, 0x01, 0x03, 0x00, 0x3a, 0x98, 0x17, 0x02, 0x01, 0x10,
+            0x15, 0x0c, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00,
+            0x00, 0x00, 0x03, 0x1a, 0x1d, 0x80, 0x00, 0x00, 0x64, 0x01, 0x04,
+            0x00, 0x00, 0x00, 0xff, 0x02, 0x04, 0x00, 0x00, 0x00, 0x0f, 0x04,
+            0x01, 0x80, 0x05, 0x08, 0x00, 0x00, 0x00, 0x64, 0x00, 0x00, 0x00,
+            0xc8, 0x28, 0x01, 0x02, 0x01, 0x04, 0x03, 0x49, 0x00, 0x00, 0x16,
+            0xa6, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x03, 0x00, 0x00, 0x0a,
+            0x9b, 0x03, 0x04, 0x00, 0x00, 0x00, 0x0f, 0x0e, 0x04, 0x00, 0x00,
+            0x00, 0x0f, 0x06, 0x04, 0x0a, 0x00, 0x01, 0x01, 0x08, 0x04, 0x0a,
+            0x00, 0x01, 0x02, 0x09, 0x04, 0x4c, 0xee, 0x6b, 0x28, 0x0a, 0x04,
+            0x4b, 0x3e, 0xbc, 0x20, 0x0b, 0x20, 0x4b, 0x3e, 0xbc, 0x20, 0x4b,
+            0x3e, 0xbc, 0x20, 0x4b, 0x3e, 0xbc, 0x20, 0x4b, 0x3e, 0xbc, 0x20,
+            0x4b, 0x3e, 0xbc, 0x20, 0x4b, 0x3e, 0xbc, 0x20, 0x4b, 0x3e, 0xbc,
+            0x20, 0x4b, 0x3e, 0xbc, 0x20, 0x12, 0x03, 0x00, 0x00, 0x64, 0x21,
+            0x04, 0x00, 0x00, 0x03, 0xe8, 0x22, 0x08, 0x00, 0x00, 0x01, 0xf4,
+            0x00, 0x00, 0x07, 0xd0, 0x23, 0x04, 0x00, 0x00, 0x00, 0x64, 0x24,
+            0x04, 0x00, 0x00, 0x00, 0x0a, 0x25, 0x04, 0x4c, 0xbe, 0xbc, 0x20,
+            0x26, 0x04, 0x4c, 0x3e, 0xbc, 0x20, 0x27, 0x04, 0x4b, 0xbe, 0xbc,
+            0x20, 0x20, 0x0b, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+            0x00, 0x3a, 0x98, 0x0f, 0x02, 0x01, 0x10, 0x10, 0x0f, 0x01, 0x00,
+            0x40, 0x0e, 0x04, 0x00, 0x00, 0x00, 0x0f, 0x21, 0x04, 0x00, 0x00,
+            0x03, 0xe8, 0x84, 0x04, 0x01, 0x01, 0x01, 0x01, 0x87, 0x3c, 0x00,
+            0x00, 0x00, 0x0a, 0x58, 0x0a, 0x00, 0x01, 0x2a, 0x04, 0x01, 0x40,
+            0x0b, 0x04, 0x01, 0x01, 0x01, 0x01, 0x0c, 0x10, 0x20, 0x01, 0x0d,
+            0xb8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x01, 0x03, 0x06, 0x40, 0x00, 0x00, 0x00, 0x00, 0x0a, 0x06,
+            0x05, 0x80, 0x00, 0x00, 0x03, 0xe8, 0x00, 0x00, 0x00, 0x0a, 0x20,
+            0x01, 0x01, 0x01, 0x01, 0x86, 0x04, 0x01, 0x01, 0x01, 0x01, 0xe8,
+            0x10, 0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0xec, 0x48, 0x00, 0x00, 0x00,
+            0x0a, 0x20, 0x80, 0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x23, 0x04, 0x01,
+            0x20, 0x0b, 0x04, 0x01, 0x01, 0x01, 0x01, 0x0c, 0x10, 0x20, 0x01,
+            0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x01, 0x03, 0x06, 0x40, 0x00, 0x00, 0x00, 0x00, 0x0b,
+            0x00, 0x00, 0x00, 0x0a, 0x00, 0x40, 0x20, 0x01, 0x0d, 0xb8, 0x10,
+            0x00, 0x00, 0x00, 0x8c, 0x10, 0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+        ],
+        None,
+        Pdu::Lsp(Lsp::new(
+            LevelNumber::L1,
+            1170,
+            LspId::from([0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00]),
+            0x00000004,
+            LspFlags::IS_TYPE1,
+            LspTlvs {
+                auth: None,
+                protocols_supported: Some(ProtocolsSupportedTlv {
+                    list: vec![0xcc],
+                }),
+                mt_cap: vec![],
+                router_cap: vec![RouterCapTlv {
+                    router_id: Some(ip4!("1.1.1.1")),
+                    flags: RouterCapFlags::empty(),
+                    sub_tlvs: RouterCapStlvs {
+                        sr_cap: Some(SrCapabilitiesStlv::new(
+                            SrCapabilitiesFlags::I | SrCapabilitiesFlags::V,
+                            vec![LabelBlockEntry::new(
+                                8000,
+                                Sid::Label(Label::new(16000)),
+                            )],
+                        )),
+                        sr_algo: Some(SrAlgoStlv::new(
+                            [IgpAlgoType::Spf].into(),
+                        )),
+                        srlb: Some(SrLocalBlockStlv::new(vec![
+                            LabelBlockEntry::new(
+                                1000,
+                                Sid::Label(Label::new(15000)),
+                            ),
+                        ])),
+                        node_msd: Some(MsdStlv::new(btreemap! { 1 => 16 })),
+                        node_tags: vec![NodeAdminTagStlv::new(
+                            [1, 2, 3].into(),
+                        )],
+                        fad: vec![FadStlv {
+                            flex_algo: 128,
+                            metric_type: 0,
+                            calc_type: 0,
+                            priority: 100,
+                            sub_tlvs: FadStlvs {
+                                exclude_admin_group: Some(
+                                    ExtAdminGroupStlv::new(vec![
+                                        0x00, 0x00, 0x00, 0xFF,
+                                    ]),
+                                ),
+                                include_any_admin_group: Some(
+                                    ExtAdminGroupStlv::new(vec![
+                                        0x00, 0x00, 0x00, 0x0F,
+                                    ]),
+                                ),
+                                include_all_admin_group: None,
+                                flags: Some(FadFlagsStlv::new(FadFlags::M)),
+                                exclude_srlgs: Some(ExcludeSrlgsStlv::new(
+                                    vec![100, 200],
+                                )),
+                                unknown: vec![],
+                            },
+                        }],
+                        flooding_algo: Some(FloodingAlgoStlv::new(
+                            FloodingAlgo::ModifiedManet as u8,
+                        )),
+                        ..Default::default()
+                    },
+                }],
+                area_addrs: vec![AreaAddressesTlv {
+                    list: vec![AreaAddr::from([0x49, 0, 0].as_slice())],
+                }],
+                multi_topology: vec![],
+                purge_originator_id: None,
+                hostname: None,
+                lsp_buf_size: None,
+                is_reach: vec![],
+                ext_is_reach: vec![IsReachTlv {
+                    mt_id: None,
+                    list: vec![IsReach {
+                        neighbor: LanId::from([
+                            0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x03,
+                        ]),
+                        metric: 10,
+                        sub_tlvs: IsReachStlvs {
+                            admin_group: Some(AdminGroupStlv::new(0x0f)),
+                            ext_admin_group: Some(ExtAdminGroupStlv::new(
+                                vec![0x00, 0x00, 0x00, 0x0f],
+                            )),
+                            ipv4_interface_addr: vec![
+                                Ipv4InterfaceAddrStlv::new(ip4!("10.0.1.1")),
+                            ],
+                            ipv4_neighbor_addr: vec![
+                                Ipv4NeighborAddrStlv::new(ip4!("10.0.1.2")),
+                            ],
+                            max_link_bw: Some(MaxLinkBwStlv::new(125000000.0)),
+                            max_resv_link_bw: Some(MaxResvLinkBwStlv::new(
+                                12500000.0,
+                            )),
+                            unreserved_bw: Some(UnreservedBwStlv::new([
+                                12500000.0, 12500000.0, 12500000.0, 12500000.0,
+                                12500000.0, 12500000.0, 12500000.0, 12500000.0,
+                            ])),
+                            te_default_metric: Some(TeDefaultMetricStlv::new(
+                                100,
+                            )),
+                            uni_link_delay: Some(UniLinkDelayStlv::new(
+                                UniLinkDelayFlags::empty(),
+                                1000,
+                            )),
+                            min_max_uni_link_delay: Some(
+                                MinMaxUniLinkDelayStlv::new(
+                                    MinMaxUniLinkDelayFlags::empty(),
+                                    500,
+                                    2000,
+                                ),
+                            ),
+                            uni_delay_variation: Some(
+                                UniDelayVariationStlv::new(100),
+                            ),
+                            uni_link_loss: Some(UniLinkLossStlv::new(
+                                UniLinkLossFlags::empty(),
+                                10,
+                            )),
+                            uni_resid_bw: Some(UniResidualBwStlv::new(
+                                100000000.0,
+                            )),
+                            uni_avail_bw: Some(UniAvailBwStlv::new(50000000.0)),
+                            uni_util_bw: Some(UniUtilBwStlv::new(25000000.0)),
+                            asla: vec![AslaStlv {
+                                l_flag: false,
+                                sabm_length: 1,
+                                sabm: AslaSabmFlags::S,
+                                udabm_length: 0,
+                                udabm: 0,
+                                sub_tlvs: AslaStlvs {
+                                    ext_admin_group: Some(
+                                        ExtAdminGroupStlv::new(vec![
+                                            0x00, 0x00, 0x00, 0x0f,
+                                        ]),
+                                    ),
+                                    uni_link_delay: Some(
+                                        UniLinkDelayStlv::new(
+                                            UniLinkDelayFlags::empty(),
+                                            1000,
+                                        ),
+                                    ),
+                                    ..Default::default()
+                                },
+                            }],
+                            adj_sids: vec![AdjSidStlv {
+                                flags: AdjSidFlags::V | AdjSidFlags::L,
+                                weight: 0,
+                                nbr_system_id: Some(SystemId::from([
+                                    0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+                                ])),
+                                sid: Sid::Label(Label::new(15000)),
+                            }],
+                            link_msd: Some(MsdStlv::new(btreemap! { 1 => 16 })),
+                            unknown: vec![],
+                        },
+                    }],
+                }],
+                mt_is_reach: vec![],
+                ipv4_addrs: vec![Ipv4AddressesTlv {
+                    list: vec![ip4!("1.1.1.1")],
+                }],
+                ipv4_internal_reach: vec![],
+                ipv4_external_reach: vec![],
+                ext_ipv4_reach: vec![Ipv4ReachTlv {
+                    mt_id: None,
+                    list: vec![
+                        Ipv4Reach {
+                            metric: 10,
+                            up_down: false,
+                            prefix: net4!("10.0.1.0/24"),
+                            sub_tlvs: Ipv4ReachStlvs {
+                                prefix_attr_flags: Some(
+                                    PrefixAttrFlagsStlv::new(
+                                        PrefixAttrFlags::R,
+                                    ),
+                                ),
+                                ipv4_source_rid: Some(Ipv4SourceRidStlv::new(
+                                    ip4!("1.1.1.1"),
+                                )),
+                                ipv6_source_rid: Some(Ipv6SourceRidStlv::new(
+                                    ip6!("2001:db8::1"),
+                                )),
+                                prefix_sids: btreemap! {
+                                    IgpAlgoType::Spf => {
+                                        PrefixSidStlv {
+                                            flags: PrefixSidFlags::N,
+                                            algo: IgpAlgoType::Spf,
+                                            sid: Sid::Index(10),
+                                        }
+                                    }
+                                },
+                                fapm: btreemap! { 128 => FapmStlv::new(128, 1000) },
+                                ..Default::default()
+                            },
+                        },
+                        Ipv4Reach {
+                            metric: 10,
+                            up_down: false,
+                            prefix: net4!("1.1.1.1/32"),
+                            sub_tlvs: Default::default(),
+                        },
+                    ],
+                }],
+                mt_ipv4_reach: vec![],
+                ipv4_router_id: Some(Ipv4RouterIdTlv::new(ip4!("1.1.1.1"))),
+                ipv6_addrs: vec![Ipv6AddressesTlv {
+                    list: vec![ip6!("2001:db8::1")],
+                }],
+                ipv6_reach: vec![Ipv6ReachTlv {
+                    mt_id: None,
+                    list: vec![
+                        Ipv6Reach {
+                            metric: 10,
+                            up_down: false,
+                            external: false,
+                            prefix: net6!("2001:db8::1/128"),
+                            sub_tlvs: Ipv6ReachStlvs {
+                                prefix_attr_flags: Some(
+                                    PrefixAttrFlagsStlv::new(
+                                        PrefixAttrFlags::N,
+                                    ),
+                                ),
+                                ipv4_source_rid: Some(Ipv4SourceRidStlv::new(
+                                    ip4!("1.1.1.1"),
+                                )),
+                                ipv6_source_rid: Some(Ipv6SourceRidStlv::new(
+                                    ip6!("2001:db8::1"),
+                                )),
+                                prefix_sids: btreemap! {
+                                    IgpAlgoType::Spf => {
+                                        PrefixSidStlv {
+                                            flags: PrefixSidFlags::N,
+                                            algo: IgpAlgoType::Spf,
+                                            sid: Sid::Index(11),
+                                        }
+                                    }
+                                },
+                                ..Default::default()
+                            },
+                        },
+                        Ipv6Reach {
+                            metric: 10,
+                            up_down: false,
+                            external: false,
+                            prefix: net6!("2001:db8:1000::0/64"),
+                            sub_tlvs: Default::default(),
+                        },
+                    ],
+                }],
+                mt_ipv6_reach: vec![],
+                ipv6_router_id: Some(Ipv6RouterIdTlv::new(ip6!("2001:db8::1"))),
+                unknown: vec![],
+            },
+            None,
+        )),
+    )
+});
+
+static LSP2: Lazy<(Vec<u8>, Option<&Key>, Pdu)> = Lazy::new(|| {
+    (
+        vec![
+            0x83, 0x1b, 0x01, 0x00, 0x12, 0x01, 0x00, 0x00, 0x00, 0x8d, 0x04,
+            0xa3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x13, 0xb3, 0x9b, 0x01, 0x81, 0x01, 0xcc, 0x01, 0x04, 0x03,
+            0x49, 0x00, 0x00, 0x89, 0x04, 0x68, 0x6f, 0x6c, 0x6f, 0x0e, 0x02,
+            0x05, 0xd4, 0x02, 0x17, 0x00, 0x0a, 0x80, 0x80, 0x80, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x04, 0x00, 0x0a, 0x80, 0x80, 0x80, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x05, 0x00, 0x84, 0x04, 0x06, 0x06, 0x06, 0x06,
+            0x80, 0x24, 0x0a, 0x80, 0x80, 0x80, 0x0a, 0x00, 0x07, 0x00, 0xff,
+            0xff, 0xff, 0x00, 0x0a, 0x80, 0x80, 0x80, 0x0a, 0x00, 0x08, 0x00,
+            0xff, 0xff, 0xff, 0x00, 0x0a, 0x80, 0x80, 0x80, 0x06, 0x06, 0x06,
+            0x06, 0xff, 0xff, 0xff, 0xff, 0x82, 0x18, 0x0a, 0x80, 0x80, 0x80,
+            0xac, 0x10, 0x01, 0x00, 0xff, 0xff, 0xff, 0x00, 0x4a, 0x80, 0x80,
+            0x80, 0xac, 0x10, 0x02, 0x00, 0xff, 0xff, 0xff, 0x00,
+        ],
+        None,
+        Pdu::Lsp(Lsp::new(
+            LevelNumber::L1,
+            1187,
+            LspId::from([0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00]),
+            0x00000013,
+            LspFlags::IS_TYPE1,
+            LspTlvs {
+                auth: None,
+                protocols_supported: Some(ProtocolsSupportedTlv {
+                    list: vec![0xcc],
+                }),
+                mt_cap: vec![],
+                router_cap: vec![],
+                area_addrs: vec![AreaAddressesTlv {
+                    list: vec![AreaAddr::from([0x49, 0, 0].as_slice())],
+                }],
+                multi_topology: vec![],
+                purge_originator_id: None,
+                hostname: Some(DynamicHostnameTlv {
+                    hostname: "holo".to_owned(),
+                }),
+                lsp_buf_size: Some(LspBufferSizeTlv { size: 1492 }),
+                is_reach: vec![LegacyIsReachTlv {
+                    list: vec![
+                        LegacyIsReach {
+                            metric: 10,
+                            metric_delay: None,
+                            metric_expense: None,
+                            metric_error: None,
+                            neighbor: LanId::from([
+                                0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00,
+                            ]),
+                        },
+                        LegacyIsReach {
+                            metric: 10,
+                            metric_delay: None,
+                            metric_expense: None,
+                            metric_error: None,
+                            neighbor: LanId::from([
+                                0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00,
+                            ]),
+                        },
+                    ],
+                }],
+                ext_is_reach: vec![],
+                mt_is_reach: vec![],
+                ipv4_addrs: vec![Ipv4AddressesTlv {
+                    list: vec![ip4!("6.6.6.6")],
+                }],
+                ipv4_internal_reach: vec![LegacyIpv4ReachTlv {
+                    list: vec![
+                        LegacyIpv4Reach {
+                            up_down: false,
+                            ie_bit: false,
+                            metric: 10,
+                            metric_delay: None,
+                            metric_expense: None,
+                            metric_error: None,
+                            prefix: net4!("10.0.7.0/24"),
+                        },
+                        LegacyIpv4Reach {
+                            up_down: false,
+                            ie_bit: false,
+                            metric: 10,
+                            metric_delay: None,
+                            metric_expense: None,
+                            metric_error: None,
+                            prefix: net4!("10.0.8.0/24"),
+                        },
+                        LegacyIpv4Reach {
+                            up_down: false,
+                            ie_bit: false,
+                            metric: 10,
+                            metric_delay: None,
+                            metric_expense: None,
+                            metric_error: None,
+                            prefix: net4!("6.6.6.6/32"),
+                        },
+                    ],
+                }],
+                ipv4_external_reach: vec![LegacyIpv4ReachTlv {
+                    list: vec![
+                        LegacyIpv4Reach {
+                            up_down: false,
+                            ie_bit: false,
+                            metric: 10,
+                            metric_delay: None,
+                            metric_expense: None,
+                            metric_error: None,
+                            prefix: net4!("172.16.1.0/24"),
+                        },
+                        LegacyIpv4Reach {
+                            up_down: false,
+                            ie_bit: true,
+                            metric: 10,
+                            metric_delay: None,
+                            metric_expense: None,
+                            metric_error: None,
+                            prefix: net4!("172.16.2.0/24"),
+                        },
+                    ],
+                }],
+                ext_ipv4_reach: vec![],
+                mt_ipv4_reach: vec![],
+                ipv4_router_id: None,
+                ipv6_addrs: vec![],
+                ipv6_reach: vec![],
+                mt_ipv6_reach: vec![],
+                ipv6_router_id: None,
+                unknown: vec![],
+            },
+            None,
+        )),
+    )
+});
+
+static LSP3_HMAC_MD5: Lazy<(Vec<u8>, Option<&Key>, Pdu)> = Lazy::new(|| {
+    (
+        vec![
+            0x83, 0x1b, 0x01, 0x00, 0x12, 0x01, 0x00, 0x00, 0x00, 0x5d, 0x04,
+            0x92, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x04, 0xd5, 0x41, 0x01, 0x0a, 0x11, 0x36, 0xcf, 0xab, 0x8f,
+            0xed, 0xdf, 0xeb, 0xb5, 0x7e, 0xf0, 0xf7, 0x84, 0x23, 0x6f, 0xf8,
+            0x37, 0x17, 0x81, 0x01, 0xcc, 0x01, 0x04, 0x03, 0x49, 0x00, 0x00,
+            0x16, 0x0b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x03, 0x00, 0x00,
+            0x0a, 0x00, 0x84, 0x04, 0x01, 0x01, 0x01, 0x01, 0x87, 0x11, 0x00,
+            0x00, 0x00, 0x0a, 0x18, 0x0a, 0x00, 0x01, 0x00, 0x00, 0x00, 0x0a,
+            0x20, 0x01, 0x01, 0x01, 0x01,
+        ],
+        Some(&KEY_HMAC_MD5),
+        Pdu::Lsp(Lsp::new(
+            LevelNumber::L1,
+            1170,
+            LspId::from([0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00]),
+            0x00000004,
+            LspFlags::IS_TYPE1,
+            LspTlvs {
+                auth: None,
+                protocols_supported: Some(ProtocolsSupportedTlv {
+                    list: vec![0xcc],
+                }),
+                mt_cap: vec![],
+                router_cap: vec![],
+                area_addrs: vec![AreaAddressesTlv {
+                    list: vec![AreaAddr::from([0x49, 0, 0].as_slice())],
+                }],
+                multi_topology: vec![],
+                purge_originator_id: None,
+                hostname: None,
+                lsp_buf_size: None,
+                is_reach: vec![],
+                ext_is_reach: vec![IsReachTlv {
+                    mt_id: None,
+                    list: vec![IsReach {
+                        neighbor: LanId::from([
+                            0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x03,
+                        ]),
+                        metric: 10,
+                        sub_tlvs: Default::default(),
+                    }],
+                }],
+                mt_is_reach: vec![],
+                ipv4_addrs: vec![Ipv4AddressesTlv {
+                    list: vec![ip4!("1.1.1.1")],
+                }],
+                ipv4_internal_reach: vec![],
+                ipv4_external_reach: vec![],
+                ext_ipv4_reach: vec![Ipv4ReachTlv {
+                    mt_id: None,
+                    list: vec![
+                        Ipv4Reach {
+                            metric: 10,
+                            up_down: false,
+                            prefix: net4!("10.0.1.0/24"),
+                            sub_tlvs: Default::default(),
+                        },
+                        Ipv4Reach {
+                            metric: 10,
+                            up_down: false,
+                            prefix: net4!("1.1.1.1/32"),
+                            sub_tlvs: Default::default(),
+                        },
+                    ],
+                }],
+                mt_ipv4_reach: vec![],
+                ipv4_router_id: None,
+                ipv6_addrs: vec![],
+                ipv6_reach: vec![],
+                mt_ipv6_reach: vec![],
+                ipv6_router_id: None,
+                unknown: vec![],
+            },
+            Some(&KEY_HMAC_MD5),
+        )),
+    )
+});
+
+static LSP3_HMAC_SHA256: Lazy<(Vec<u8>, Option<&Key>, Pdu)> = Lazy::new(|| {
+    (
+        vec![
+            0x83, 0x1b, 0x01, 0x00, 0x12, 0x01, 0x00, 0x00, 0x00, 0x6f, 0x04,
+            0x92, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x04, 0x77, 0xa6, 0x01, 0x0a, 0x23, 0x03, 0x00, 0x01, 0xc2,
+            0xd4, 0x57, 0xfb, 0xb0, 0x6b, 0xfe, 0x01, 0xec, 0x91, 0x30, 0x27,
+            0xa2, 0x9e, 0xd1, 0xbd, 0xe3, 0x07, 0x74, 0xe5, 0x71, 0x87, 0xeb,
+            0x78, 0x6c, 0x8f, 0xb0, 0x4c, 0xad, 0x46, 0x65, 0xb6, 0x81, 0x01,
+            0xcc, 0x01, 0x04, 0x03, 0x49, 0x00, 0x00, 0x16, 0x0b, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x02, 0x03, 0x00, 0x00, 0x0a, 0x00, 0x84, 0x04,
+            0x01, 0x01, 0x01, 0x01, 0x87, 0x11, 0x00, 0x00, 0x00, 0x0a, 0x18,
+            0x0a, 0x00, 0x01, 0x00, 0x00, 0x00, 0x0a, 0x20, 0x01, 0x01, 0x01,
+            0x01,
+        ],
+        Some(&KEY_HMAC_SHA256),
+        Pdu::Lsp(Lsp::new(
+            LevelNumber::L1,
+            1170,
+            LspId::from([0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00]),
+            0x00000004,
+            LspFlags::IS_TYPE1,
+            LspTlvs {
+                auth: None,
+                protocols_supported: Some(ProtocolsSupportedTlv {
+                    list: vec![0xcc],
+                }),
+                mt_cap: vec![],
+                router_cap: vec![],
+                area_addrs: vec![AreaAddressesTlv {
+                    list: vec![AreaAddr::from([0x49, 0, 0].as_slice())],
+                }],
+                multi_topology: vec![],
+                purge_originator_id: None,
+                hostname: None,
+                lsp_buf_size: None,
+                is_reach: vec![],
+                ext_is_reach: vec![IsReachTlv {
+                    mt_id: None,
+                    list: vec![IsReach {
+                        neighbor: LanId::from([
+                            0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x03,
+                        ]),
+                        metric: 10,
+                        sub_tlvs: Default::default(),
+                    }],
+                }],
+                mt_is_reach: vec![],
+                ipv4_addrs: vec![Ipv4AddressesTlv {
+                    list: vec![ip4!("1.1.1.1")],
+                }],
+                ipv4_internal_reach: vec![],
+                ipv4_external_reach: vec![],
+                ext_ipv4_reach: vec![Ipv4ReachTlv {
+                    mt_id: None,
+                    list: vec![
+                        Ipv4Reach {
+                            metric: 10,
+                            up_down: false,
+                            prefix: net4!("10.0.1.0/24"),
+                            sub_tlvs: Default::default(),
+                        },
+                        Ipv4Reach {
+                            metric: 10,
+                            up_down: false,
+                            prefix: net4!("1.1.1.1/32"),
+                            sub_tlvs: Default::default(),
+                        },
+                    ],
+                }],
+                mt_ipv4_reach: vec![],
+                ipv4_router_id: None,
+                ipv6_addrs: vec![],
+                ipv6_reach: vec![],
+                mt_ipv6_reach: vec![],
+                ipv6_router_id: None,
+                unknown: vec![],
+            },
+            Some(&KEY_HMAC_SHA256),
+        )),
+    )
+});
+
+static LSP4: Lazy<(Vec<u8>, Option<&Key>, Pdu)> = Lazy::new(|| {
+    (
+        vec![
+            0x83, 0x1b, 0x01, 0x00, 0x12, 0x01, 0x00, 0x00, 0x00, 0x9a, 0x04,
+            0x92, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x04, 0x3a, 0x4b, 0x01, 0x81, 0x02, 0xcc, 0x8e, 0x01, 0x04,
+            0x03, 0x49, 0x00, 0x00, 0xe5, 0x04, 0x00, 0x00, 0x00, 0x02, 0x16,
+            0x0b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x03, 0x00, 0x00, 0x0a,
+            0x00, 0xde, 0x0d, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02,
+            0x03, 0x00, 0x00, 0x0a, 0x00, 0x84, 0x04, 0x01, 0x01, 0x01, 0x01,
+            0x87, 0x11, 0x00, 0x00, 0x00, 0x0a, 0x18, 0x0a, 0x00, 0x01, 0x00,
+            0x00, 0x00, 0x0a, 0x20, 0x01, 0x01, 0x01, 0x01, 0xe8, 0x10, 0x20,
+            0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x01, 0xed, 0x26, 0x00, 0x02, 0x00, 0x00, 0x00,
+            0x0a, 0x00, 0x80, 0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+            0x0a, 0x00, 0x40, 0x20, 0x01, 0x0d, 0xb8, 0x10, 0x00, 0x00, 0x00,
+        ],
+        None,
+        Pdu::Lsp(Lsp::new(
+            LevelNumber::L1,
+            1170,
+            LspId::from([0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00]),
+            0x00000004,
+            LspFlags::IS_TYPE1,
+            LspTlvs {
+                auth: None,
+                protocols_supported: Some(ProtocolsSupportedTlv {
+                    list: vec![0xcc, 0x8e],
+                }),
+                mt_cap: vec![],
+                router_cap: vec![],
+                area_addrs: vec![AreaAddressesTlv {
+                    list: vec![AreaAddr::from([0x49, 0, 0].as_slice())],
+                }],
+                multi_topology: vec![MultiTopologyTlv {
+                    list: vec![
+                        MultiTopologyEntry {
+                            flags: MtFlags::empty(),
+                            mt_id: 0,
+                        },
+                        MultiTopologyEntry {
+                            flags: MtFlags::empty(),
+                            mt_id: 2,
+                        },
+                    ],
+                }],
+                purge_originator_id: None,
+                hostname: None,
+                lsp_buf_size: None,
+                is_reach: vec![],
+                ext_is_reach: vec![IsReachTlv {
+                    mt_id: None,
+                    list: vec![IsReach {
+                        neighbor: LanId::from([
+                            0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x03,
+                        ]),
+                        metric: 10,
+                        sub_tlvs: Default::default(),
+                    }],
+                }],
+                mt_is_reach: vec![IsReachTlv {
+                    mt_id: Some(2),
+                    list: vec![IsReach {
+                        neighbor: LanId::from([
+                            0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x03,
+                        ]),
+                        metric: 10,
+                        sub_tlvs: Default::default(),
+                    }],
+                }],
+                ipv4_addrs: vec![Ipv4AddressesTlv {
+                    list: vec![ip4!("1.1.1.1")],
+                }],
+                ipv4_internal_reach: vec![],
+                ipv4_external_reach: vec![],
+                ext_ipv4_reach: vec![Ipv4ReachTlv {
+                    mt_id: None,
+                    list: vec![
+                        Ipv4Reach {
+                            metric: 10,
+                            up_down: false,
+                            prefix: net4!("10.0.1.0/24"),
+                            sub_tlvs: Default::default(),
+                        },
+                        Ipv4Reach {
+                            metric: 10,
+                            up_down: false,
+                            prefix: net4!("1.1.1.1/32"),
+                            sub_tlvs: Default::default(),
+                        },
+                    ],
+                }],
+                mt_ipv4_reach: vec![],
+                ipv4_router_id: None,
+                ipv6_addrs: vec![Ipv6AddressesTlv {
+                    list: vec![ip6!("2001:db8::1")],
+                }],
+                ipv6_reach: vec![],
+                mt_ipv6_reach: vec![Ipv6ReachTlv {
+                    mt_id: Some(2),
+                    list: vec![
+                        Ipv6Reach {
+                            metric: 10,
+                            up_down: false,
+                            external: false,
+                            prefix: net6!("2001:db8::1/128"),
+                            sub_tlvs: Default::default(),
+                        },
+                        Ipv6Reach {
+                            metric: 10,
+                            up_down: false,
+                            external: false,
+                            prefix: net6!("2001:db8:1000::0/64"),
+                            sub_tlvs: Default::default(),
+                        },
+                    ],
+                }],
+                ipv6_router_id: None,
+                unknown: vec![],
+            },
+            None,
+        )),
+    )
+});
+
+static LSP5: Lazy<(Vec<u8>, Option<&Key>, Pdu)> = Lazy::new(|| {
+    (
+        vec![
+            0x83, 0x1b, 0x01, 0x00, 0x14, 0x01, 0x00, 0x00, 0x00, 0x30, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x05, 0xd4, 0xc0, 0x02, 0x0d, 0x0d, 0x02, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x89, 0x04,
+            0x68, 0x6f, 0x6c, 0x6f,
+        ],
+        None,
+        Pdu::Lsp(Lsp::new(
+            LevelNumber::L2,
+            0,
+            LspId::from([0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00]),
+            0x00000005,
+            LspFlags::IS_TYPE2,
+            LspTlvs {
+                auth: None,
+                protocols_supported: None,
+                mt_cap: vec![],
+                router_cap: vec![],
+                area_addrs: vec![],
+                multi_topology: vec![],
+                purge_originator_id: Some(PurgeOriginatorIdTlv {
+                    system_id: SystemId::from([
+                        0x00, 0x00, 0x00, 0x00, 0x00, 0x02,
+                    ]),
+                    system_id_rcvd: Some(SystemId::from([
+                        0x00, 0x00, 0x00, 0x00, 0x00, 0x03,
+                    ])),
+                }),
+                hostname: Some(DynamicHostnameTlv {
+                    hostname: "holo".to_owned(),
+                }),
+                lsp_buf_size: None,
+                is_reach: vec![],
+                ext_is_reach: vec![],
+                mt_is_reach: vec![],
+                ipv4_addrs: vec![],
+                ipv4_internal_reach: vec![],
+                ipv4_external_reach: vec![],
+                ext_ipv4_reach: vec![],
+                mt_ipv4_reach: vec![],
+                ipv4_router_id: None,
+                ipv6_addrs: vec![],
+                ipv6_reach: vec![],
+                mt_ipv6_reach: vec![],
+                ipv6_router_id: None,
+                unknown: vec![],
+            },
+            None,
+        )),
+    )
+});
+
+// LSP with MT-Capability TLV containing SPBM-SI Sub-TLV.
+static LSP6_MT_CAP: Lazy<(Vec<u8>, Option<&Key>, Pdu)> = Lazy::new(|| {
+    (
+        vec![
+            // PDU header
+            0x83, 0x1b, 0x01, 0x00, 0x12, 0x01, 0x00, 0x00,
+            // PDU length (2 bytes): 66 bytes
+            0x00, 0x42, // Remaining lifetime: 1170
+            0x04, 0x92, // LSP ID: 0000.0000.0001.00-00
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
+            // Sequence number: 0x00000006
+            0x00, 0x00, 0x00, 0x06, // Checksum
+            0xa1, 0xf9, // Flags: IS_TYPE1
+            0x01, // Protocols Supported TLV (Type 129)
+            0x81, 0x01, 0xcc,
+            // MT-Capability TLV (Type 144)
+            // Type: 144 (0x90), Length: 28 (0x1c)
+            0x90, 0x1c, // O=0, Reserved=0, MT-ID=0 (2 bytes)
+            0x00, 0x00,
+            // SPBM-SI Sub-TLV (Type 3)
+            // Type: 3, Length: 24 (0x18)
+            0x03, 0x18, // B-MAC: 00:11:22:33:44:55 (6 bytes)
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55,
+            // Reserved (4 bits) + Base VID (12 bits): VID=100 (0x0064)
+            0x00, 0x64,
+            // I-SID Entry 1: T=1, R=1, I-SID=0x010001 (65537)
+            0xc0, 0x01, 0x00, 0x01,
+            // I-SID Entry 2: T=1, R=0, I-SID=0x010002 (65538)
+            0x80, 0x01, 0x00, 0x02,
+            // I-SID Entry 3: T=0, R=1, I-SID=0x010003 (65539)
+            0x40, 0x01, 0x00, 0x03,
+            // I-SID Entry 4: T=0, R=0, I-SID=0x010004 (65540)
+            0x00, 0x01, 0x00, 0x04, // Area Addresses TLV (Type 1)
+            0x01, 0x04, 0x03, 0x49, 0x00, 0x00,
+        ],
+        None,
+        Pdu::Lsp(Lsp::new(
+            LevelNumber::L1,
+            1170,
+            LspId::from([0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00]),
+            0x00000006,
+            LspFlags::IS_TYPE1,
+            LspTlvs {
+                auth: None,
+                protocols_supported: Some(ProtocolsSupportedTlv {
+                    list: vec![0xcc],
+                }),
+                mt_cap: vec![MtCapabilityTlv {
+                    overload: false,
+                    mt_id: 0,
+                    sub_tlvs: MtCapStlvs {
+                        spbm_si: vec![SpbmSiStlv {
+                            bmac: [0x00, 0x11, 0x22, 0x33, 0x44, 0x55],
+                            base_vid: 100,
+                            isid_entries: vec![
+                                IsidEntry::new(
+                                    IsidFlags::T | IsidFlags::R,
+                                    0x010001,
+                                ),
+                                IsidEntry::new(IsidFlags::T, 0x010002),
+                                IsidEntry::new(IsidFlags::R, 0x010003),
+                                IsidEntry::new(IsidFlags::empty(), 0x010004),
+                            ],
+                        }],
+                        unknown: vec![],
+                    },
+                }],
+                router_cap: vec![],
+                area_addrs: vec![AreaAddressesTlv {
+                    list: vec![AreaAddr::from([0x49, 0, 0].as_slice())],
+                }],
+                multi_topology: vec![],
+                purge_originator_id: None,
+                hostname: None,
+                lsp_buf_size: None,
+                is_reach: vec![],
+                ext_is_reach: vec![],
+                mt_is_reach: vec![],
+                ipv4_addrs: vec![],
+                ipv4_internal_reach: vec![],
+                ipv4_external_reach: vec![],
+                ext_ipv4_reach: vec![],
+                mt_ipv4_reach: vec![],
+                ipv4_router_id: None,
+                ipv6_addrs: vec![],
+                ipv6_reach: vec![],
+                mt_ipv6_reach: vec![],
+                ipv6_router_id: None,
+                unknown: vec![],
+            },
+            None,
+        )),
+    )
+});
+
+//
+// Tests.
+//
+
+#[test]
+fn test_encode_lsp1() {
+    let (ref bytes, ref auth, ref lsp) = *LSP1;
+    test_encode_pdu(bytes, lsp, auth);
+}
+
+#[test]
+fn test_decode_lsp1() {
+    let (ref bytes, ref auth, ref lsp) = *LSP1;
+    test_decode_pdu(bytes, lsp, auth);
+}
+
+#[test]
+fn test_encode_lsp2() {
+    let (ref bytes, ref auth, ref lsp) = *LSP2;
+    test_encode_pdu(bytes, lsp, auth);
+}
+
+#[test]
+fn test_decode_lsp2() {
+    let (ref bytes, ref auth, ref lsp) = *LSP2;
+    test_decode_pdu(bytes, lsp, auth);
+}
+
+#[test]
+fn test_encode_lsp3_hmac_md5() {
+    let (ref bytes, ref auth, ref lsp) = *LSP3_HMAC_MD5;
+    test_encode_pdu(bytes, lsp, auth);
+}
+
+#[test]
+fn test_decode_lsp3_hmac_md5() {
+    let (ref bytes, ref auth, ref lsp) = *LSP3_HMAC_MD5;
+    test_decode_pdu(bytes, lsp, auth);
+}
+
+#[test]
+fn test_encode_lsp3_hmac_sha256() {
+    let (ref bytes, ref auth, ref lsp) = *LSP3_HMAC_SHA256;
+    test_encode_pdu(bytes, lsp, auth);
+}
+
+#[test]
+fn test_decode_lsp3_hmac_sha256() {
+    let (ref bytes, ref auth, ref lsp) = *LSP3_HMAC_SHA256;
+    test_decode_pdu(bytes, lsp, auth);
+}
+
+#[test]
+fn test_encode_lsp4() {
+    let (ref bytes, ref auth, ref lsp) = *LSP4;
+    test_encode_pdu(bytes, lsp, auth);
+}
+
+#[test]
+fn test_decode_lsp4() {
+    let (ref bytes, ref auth, ref lsp) = *LSP4;
+    test_decode_pdu(bytes, lsp, auth);
+}
+
+#[test]
+fn test_encode_lsp5() {
+    let (ref bytes, ref auth, ref lsp) = *LSP5;
+    test_encode_pdu(bytes, lsp, auth);
+}
+
+#[test]
+fn test_decode_lsp5() {
+    let (ref bytes, ref auth, ref lsp) = *LSP5;
+    test_decode_pdu(bytes, lsp, auth);
+}
+
+#[test]
+fn test_encode_lsp6_mt_cap() {
+    let (ref bytes, ref auth, ref lsp) = *LSP6_MT_CAP;
+    test_encode_pdu(bytes, lsp, auth);
+}
+
+#[test]
+fn test_decode_lsp6_mt_cap() {
+    let (ref bytes, ref auth, ref lsp) = *LSP6_MT_CAP;
+    test_decode_pdu(bytes, lsp, auth);
+}
+
+#[test]
+fn test_decode_lsp_crypto_auth_short_digest() {
+    use bytes::Bytes;
+    use holo_isis::packet::auth::AuthMethod;
+
+    // Craft an LSP PDU whose Cryptographic Authentication TLV is the last
+    // TLV in the PDU and declares a length that leaves no room for the
+    // expected HMAC-SHA256 digest.
+    let bytes = vec![
+        // Common IS-IS header.
+        0x83, 0x1b, 0x01, 0x00, 0x12, 0x01, 0x00, 0x00,
+        // PDU length (32 bytes).
+        0x00, 0x20, // Remaining lifetime.
+        0x04, 0x92, // LSP ID.
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
+        // Sequence number.
+        0x00, 0x00, 0x00, 0x04, // Checksum.
+        0x00, 0x00, // Flags.
+        0x01,
+        // Authentication TLV: type 10, length 3, auth-type 3 (Cryptographic),
+        // key-id 1. No digest bytes follow.
+        0x0a, 0x03, 0x03, 0x00, 0x01,
+    ];
+
+    let auth = AuthMethod::ManualKey(KEY_HMAC_SHA256.clone());
+    let result = Pdu::decode(&mut Bytes::from(bytes), Some(&auth), Some(&auth));
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_decode_lsp_short_pdu_length() {
+    use bytes::Bytes;
+
+    // Craft an LSP whose `pdu_len` field declares a length smaller than the
+    // fixed LSP header (27 bytes).
+    let bytes = vec![
+        // Common IS-IS header.
+        0x83, 0x1b, 0x01, 0x00, 0x12, 0x01, 0x00, 0x00,
+        // PDU length: 0 (invalid).
+        0x00, 0x00, // Remaining lifetime.
+        0x04, 0x92, // LSP ID.
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
+        // Sequence number.
+        0x00, 0x00, 0x00, 0x04, // Checksum.
+        0x00, 0x00, // Flags.
+        0x01,
+    ];
+
+    let result = Pdu::decode(&mut Bytes::from(bytes), None, None);
+    assert!(result.is_err());
+}

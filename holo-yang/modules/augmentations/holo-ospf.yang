@@ -1,0 +1,469 @@
+module holo-ospf {
+  yang-version 1.1;
+  namespace "http://holo-routing.org/yang/holo-ospf";
+  prefix holo-ospf;
+
+  import ietf-inet-types {
+    prefix "inet";
+    reference "RFC 6991: Common YANG Data Types";
+  }
+
+  import ietf-routing-types {
+    prefix rt-types;
+    reference
+      "RFC 8294: Common YANG Data Types for the Routing Area";
+  }
+
+  import ietf-routing {
+    prefix rt;
+  }
+
+  import ietf-ospf {
+    prefix ospf;
+  }
+
+  import ietf-ospfv3-extended-lsa {
+    prefix ospfv3-e-lsa;
+    reference
+      "RFC 9587 - YANG Data Model for OSPFv3 Extended LSAs";
+  }
+
+  organization
+    "Holo Routing Stack";
+
+  description
+    "This module defines augment statements for the ietf-ospf
+     module.";
+
+  /*
+   * Identities.
+   */
+  identity ospfv2-grace-lsa {
+    base ospf:ospfv2-link-scope-opaque-lsa;
+    description
+      "OSPFv2 Grace-LSA.";
+  }
+
+  identity ospfv3-grace-lsa {
+    base ospf:ospfv3-lsa-type;
+    description
+      "OSPFv3 Grace-LSA.";
+  }
+
+  identity n-bit {
+    base ospf:ospfv3-prefix-option;
+    description
+      "N-bit.  When set, the prefix is a host prefix that
+       identifies the advertising router.";
+    reference
+      "RFC 8362: OSPFv3 Link State Advertisement (LSA)
+       Extensibility";
+  }
+
+  /*
+   * Types.
+   */
+  typedef graceful-restart-reason-type {
+    type enumeration {
+      enum unknown {
+        value 0;
+      }
+      enum software-restart {
+        value 1;
+      }
+      enum software-upgrade {
+        value 2;
+      }
+      enum control-processor-switchover {
+        value 3;
+      }
+    }
+    description
+      "Describes the reason for the router restart.";
+  }
+
+  /*
+   * Groupings.
+   */
+  grouping bier-protocol-extensions {
+    description
+      "Defines protocol extensions.";
+    leaf mt-id {
+      type uint8;
+      description
+        "Multi-topology associated with bier sub-domain.";
+    }
+    container bier {
+      leaf enable {
+        type boolean;
+        default false;
+        description
+          "Enables bier protocol extensions.";
+      }
+      leaf advertise {
+        type boolean;
+        default true;
+        description
+          "Enable to advertise the parameters associated with bier.";
+      }
+      leaf receive {
+        type boolean;
+        default true;
+        description
+          "Enable to receive the parameters associated with bier.";
+      }
+      description
+        "BIER global config.";
+    }
+  }
+
+  grouping ospfv3-bier-encap-sub-sub-tlvs {
+    container bier-encap-sub-sub-tlvs {
+      list bier-encap-sub-sub-tlv {
+        description
+          "BIER sub-sub-TLVs.";
+        reference
+          "draft-ietf-bier-ospfv3-extensions-07 (Section 2.2)";
+        leaf max-si {
+          type uint8;
+        }
+        leaf id {
+          type uint32;
+        }
+        leaf bs-len {
+          type uint8;
+        }
+      }
+    }
+  }
+
+  grouping ospfv3-bier-info-sub-tlv {
+    description
+      "BIER Info sub-TLVs.";
+    reference
+      "draft-ietf-bier-ospfv3-extensions-07 (Section 2.1)";
+    leaf sub-domain-id {
+      type uint8;
+    }
+    leaf mt-id {
+      type uint8;
+    }
+    leaf bfr-id {
+      type uint16;
+    }
+    leaf bar {
+      type uint8;
+    }
+    leaf ipa {
+      type uint8;
+    }
+    list sub-sub-tlvs {
+      uses ospfv3-bier-encap-sub-sub-tlvs;
+      uses ospfv3-e-lsa:unknown-sub-tlv;
+    }
+  }
+
+  /*
+   * Augmentations.
+   */
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/ospf:ospf" {
+    container hostnames {
+      config false;
+      list hostname {
+        key "router-id";
+        leaf router-id {
+          type rt-types:router-id;
+          description
+            "Router ID associated with the hostname.";
+        }
+        leaf hostname {
+          type string {
+            length "1..255";
+          }
+          description
+            "Hostname associated with the router ID
+             as defined in RFC 5642.";
+          reference
+            "RFC 5642: Dynamic Hostname Exchange Mechanism for OSPF";
+        }
+        description
+          "List of router ID / hostname associations.";
+      }
+      description
+        "Hostname-to-router-ID mapping database.";
+    }
+
+    container trace-options {
+      description "Instance level trace options for OSPF.";
+
+      list flag {
+        key name;
+        description "List of tracing options.";
+        leaf name {
+          description
+            "List of tracing options";
+          type enumeration {
+            enum flooding;
+            enum graceful-restart;
+            enum internal-bus;
+            enum lsdb;
+            enum neighbor;
+            enum packets-all;
+            enum packets-dbdescr;
+            enum packets-hello;
+            enum packets-ls-ack;
+            enum packets-ls-request;
+            enum packets-ls-update;
+            enum spf;
+          }
+        }
+        leaf send {
+          description "Trace sent packets.";
+          type boolean;
+          default true;
+        }
+        leaf receive {
+          description "Trace received packets.";
+          type boolean;
+          default true;
+        }
+      }
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/ospf:ospf" {
+    when "derived-from-or-self(../rt:type, "
+       + "'ospf:ospfv3')" {
+      description
+        "This augmentation is only valid for OSPFv3.";
+    }
+    description
+      "OSPFv3 protocol instance-level augmentations";
+    leaf instance-id {
+      type uint8;
+      default "0";
+      description
+        "OSPFv3 instance ID.";
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/ospf:ospf/ospf:areas/ospf:area/"
+        + "ospf:interfaces/ospf:interface" {
+    container trace-options {
+      description "Interface level trace options for OSPF.";
+
+      list flag {
+        key name;
+        description "List of tracing options.";
+        leaf name {
+          description
+            "List of tracing options";
+          type enumeration {
+            enum packets-all;
+            enum packets-dbdescr;
+            enum packets-hello;
+            enum packets-ls-ack;
+            enum packets-ls-request;
+            enum packets-ls-update;
+          }
+        }
+        leaf send {
+          description "Trace sent packets.";
+          type boolean;
+          default true;
+        }
+        leaf receive {
+          description "Trace received packets.";
+          type boolean;
+          default true;
+        }
+      }
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/ospf:ospf/ospf:areas/ospf:area/"
+        + "ospf:interfaces/ospf:interface/ospf:neighbors/ospf:neighbor" {
+    container graceful-restart {
+      config false;
+      description
+        "Neighbor Graceful Restart information.";
+
+      leaf restart-reason {
+        type graceful-restart-reason-type;
+        description
+          "Graceful Restart reason encoded in the received Grace-LSA.";
+      }
+      leaf grace-timer {
+        type uint16;
+        units "seconds";
+        description
+          "This timer tracks the remaining time before the
+           grace period expires.";
+      }
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/ospf:ospf/ospf:areas/ospf:area/"
+        + "ospf:interfaces/ospf:interface/ospf:database/"
+        + "ospf:link-scope-lsa-type/ospf:link-scope-lsas/ospf:link-scope-lsa/"
+        + "ospf:version/ospf:ospfv2/ospf:ospfv2/ospf:body/ospf:opaque" {
+    container grace {
+      when "derived-from(../../header/type, "
+         + "'ospfv2-grace-lsa')" {
+        description
+          "Only applies to Grace-LSAs.";
+      }
+      description
+        "Grace-LSA.";
+      leaf grace-period {
+        type uint32;
+        units "seconds";
+        description
+          "The number of seconds that the router's neighbors should
+           continue to advertise the router as fully adjacent, regardless
+           of the state of database synchronization between the router
+           and its neighbors.";
+      }
+      leaf graceful-restart-reason {
+        type graceful-restart-reason-type;
+        description
+          "The reason for the router restart.";
+      }
+      leaf ip-interface-address {
+        type inet:ipv4-address;
+        description
+          "The router's IP interface address on the subnet associated
+           with the grace-LSA.";
+      }
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/ospf:ospf/ospf:areas/ospf:area/"
+        + "ospf:interfaces/ospf:interface/ospf:database/"
+        + "ospf:link-scope-lsa-type/ospf:link-scope-lsas/ospf:link-scope-lsa/"
+        + "ospf:version/ospf:ospfv3/ospf:ospfv3/ospf:body" {
+    container grace {
+      when "derived-from(../../header/type, "
+         + "'ospfv3-grace-lsa')" {
+        description
+          "Only applies to Grace-LSAs.";
+      }
+      description
+        "Grace-LSA.";
+      leaf grace-period {
+        type uint32;
+        units "seconds";
+        description
+          "The number of seconds that the router's neighbors should
+           continue to advertise the router as fully adjacent, regardless
+           of the state of database synchronization between the router
+           and its neighbors.";
+      }
+      leaf graceful-restart-reason {
+        type graceful-restart-reason-type;
+        description
+          "The reason for the router restart.";
+      }
+    }
+  }
+
+   augment "/rt:routing/rt:control-plane-protocols/"
+         + "rt:control-plane-protocol/ospf:ospf" {
+     when "../rt:type = 'ospf:ospfv2' or
+           ../rt:type = 'ospf:ospfv3'" {
+       description
+         "This augments the ospf routing protocol when used";
+       }
+     description
+       "This augments ospf protocol configuration with bier.";
+              container bier {
+                uses bier-protocol-extensions;
+        description
+                      "Control of bier advertisement and reception.";
+              }
+  }
+
+  /* BIER Info Sub-TLV in Extended Intra-Area Prefix TLV */
+  augment "/rt:routing/"
+             + "rt:control-plane-protocols/rt:control-plane-protocol/"
+             + "ospf:ospf/ospf:areas/ospf:area/ospf:database/"
+             + "ospf:area-scope-lsa-type/ospf:area-scope-lsas/"
+             + "ospf:area-scope-lsa/ospf:version/ospf:ospfv3/"
+             + "ospf:ospfv3/ospf:body/ospfv3-e-lsa:e-intra-area-prefix/"
+             + "ospfv3-e-lsa:e-intra-prefix-tlvs/"
+             + "ospfv3-e-lsa:intra-prefix-tlv/"
+             + "ospfv3-e-lsa:sub-tlvs" {
+    when "derived-from(/rt:routing/rt:control-plane-protocols/"
+            + "rt:control-plane-protocol/rt:type, 'ospf:ospfv3')" {
+      description
+        "This augmentation is only valid for OSPFv3
+         E-Intra-Area-Prefix LSAs";
+    }
+    container bier-info-sub-tlvs {
+      config false;
+      description
+        "BIER Info TLV.";
+      list bier-info-sub-tlv {
+        uses ospfv3-bier-info-sub-tlv;
+      }
+    }
+  }
+
+  /*
+   * Notifications.
+   */
+  notification if-rx-bad-lsa {
+    /*
+    uses ospf:notification-instance-hdr;
+    uses ospf:notification-interface;
+    */
+
+    leaf routing-protocol-name {
+      type leafref {
+        path "/rt:routing/rt:control-plane-protocols/"
+           + "rt:control-plane-protocol/rt:name";
+      }
+      must "derived-from( "
+        + "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol[rt:name=current()]/"
+        + "rt:type, 'ospf')";
+      description
+       "OSPF routing protocol instance name.";
+    }
+
+    leaf packet-source {
+      type inet:ip-address;
+      description "Source address.";
+    }
+
+    leaf error {
+      type enumeration {
+        enum "invalid-checksum" {
+          description "Invalid LSA checksum.";
+        }
+        enum "invalid-age" {
+          description "Invalid LSA age.";
+        }
+        enum "invalid-seq-num" {
+          description "Invalid LSA sequence number.";
+        }
+        enum "ospfv2-router-lsa-id-mismatch" {
+          description
+            "OSPFv2 Router-LSA's advertising router and LSA-ID are not equal.";
+        }
+      }
+      description "Error code.";
+    }
+
+    description
+      "This notification is sent when an invalid LSA is received on an
+       OSPF interface.";
+  }
+}

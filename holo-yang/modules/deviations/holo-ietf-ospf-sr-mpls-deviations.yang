@@ -1,0 +1,84 @@
+module holo-ietf-ospf-sr-mpls-deviations {
+  yang-version 1.1;
+  namespace "http://holo-routing.org/yang/holo-ietf-ospf-sr-mpls-deviations";
+  prefix holo-ietf-ospf-sr-deviations;
+
+  import ietf-routing {
+    prefix rt;
+  }
+
+  import ietf-ospf {
+    prefix ospf;
+  }
+
+  import ietf-ospfv3-extended-lsa {
+    prefix ospfv3-e-lsa;
+  }
+
+  import ietf-ospf-sr-mpls {
+    prefix ospf-sr-mpls;
+  }
+
+  organization
+    "Holo Routing Stack";
+
+  description
+    "This module defines deviation statements for the ietf-ospf-sr-mpls
+     module.";
+
+  /*
+   * Added constraints
+   */
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/ospf:ospf/ospf-sr-mpls:segment-routing/ospf-sr-mpls:enabled" {
+    deviate add {
+      must 'not(. = "true") or '
+         + 'not(derived-from-or-self(../../../rt:type, "ospf:ospfv3")) or '
+         + '../../ospfv3-e-lsa:extended-lsa-support = "true"' {
+        error-message
+          "Segment Routing for OSPFv3 requires extended LSA support "
+        + "to be enabled.";
+      }
+    }
+  }
+
+  /*
+   * Not supported nodes
+   */
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/ospf:ospf/ospf:database/ospf:as-scope-lsa-type/ospf:as-scope-lsas/ospf:as-scope-lsa/ospf:version/ospf:ospfv2/ospf:ospfv2/ospf:body/ospf:opaque/ospf:extended-prefix-opaque/ospf-sr-mpls:extended-prefix-range-tlvs" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/ospf:ospf/ospf:database/ospf:as-scope-lsa-type/ospf:as-scope-lsas/ospf:as-scope-lsa/ospf:version/ospf:ospfv3/ospf:ospfv3/ospf:body/ospfv3-e-lsa:e-as-external/ospf-sr-mpls:ospfv3-extended-prefix-range-tlvs" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/ospf:ospf/ospf:areas/ospf:area/ospf:database/ospf:area-scope-lsa-type/ospf:area-scope-lsas/ospf:area-scope-lsa/ospf:version/ospf:ospfv2/ospf:ospfv2/ospf:body/ospf:opaque/ospf:extended-prefix-opaque/ospf-sr-mpls:extended-prefix-range-tlvs" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/ospf:ospf/ospf:areas/ospf:area/ospf:database/ospf:area-scope-lsa-type/ospf:area-scope-lsas/ospf:area-scope-lsa/ospf:version/ospf:ospfv3/ospf:ospfv3/ospf:body/ospfv3-e-lsa:e-nssa/ospf-sr-mpls:ospfv3-extended-prefix-range-tlvs" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/ospf:ospf/ospf:areas/ospf:area/ospf:database/ospf:area-scope-lsa-type/ospf:area-scope-lsas/ospf:area-scope-lsa/ospf:version/ospf:ospfv3/ospf:ospfv3/ospf:body/ospfv3-e-lsa:e-inter-area-prefix/ospf-sr-mpls:ospfv3-extended-prefix-range-tlvs" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/ospf:ospf/ospf:areas/ospf:area/ospf:database/ospf:area-scope-lsa-type/ospf:area-scope-lsas/ospf:area-scope-lsa/ospf:version/ospf:ospfv3/ospf:ospfv3/ospf:body/ospfv3-e-lsa:e-intra-area-prefix/ospf-sr-mpls:ospfv3-extended-prefix-range-tlvs" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/ospf:ospf/ospf:areas/ospf:area/ospf:interfaces/ospf:interface/ospf-sr-mpls:segment-routing/ospf-sr-mpls:adjacency-sid" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/ospf:ospf/ospf:areas/ospf:area/ospf:interfaces/ospf:interface/ospf:neighbors/ospf:neighbor/ospf-sr-mpls:adjacency-sid" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/ospf:ospf/ospf:areas/ospf:area/ospf-sr-mpls:segment-routing" {
+    deviate not-supported;
+  }
+}

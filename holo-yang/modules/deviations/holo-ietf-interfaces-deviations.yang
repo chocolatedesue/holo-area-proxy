@@ -1,0 +1,52 @@
+module holo-ietf-interfaces-deviations {
+  yang-version 1.1;
+  namespace "http://holo-routing.org/yang/holo-ietf-interfaces-deviations";
+  prefix holo-ietf-interfaces-deviations;
+
+  import ietf-interfaces {
+    prefix if;
+  }
+
+  organization
+    "Holo Routing Stack";
+
+  description
+    "This module defines deviation statements for the ietf-interfaces
+     module.";
+
+  /*
+   * Not supported nodes
+   */
+
+  deviation "/if:interfaces/if:interface/if:oper-status" {
+    deviate not-supported;
+  }
+
+  deviation "/if:interfaces/if:interface/if:last-change" {
+    deviate not-supported;
+  }
+
+  deviation "/if:interfaces/if:interface/if:phys-address" {
+    deviate not-supported;
+  }
+
+  deviation "/if:interfaces/if:interface/if:higher-layer-if" {
+    deviate not-supported;
+  }
+
+  deviation "/if:interfaces/if:interface/if:lower-layer-if" {
+    deviate not-supported;
+  }
+
+  deviation "/if:interfaces/if:interface/if:speed" {
+    deviate not-supported;
+  }
+
+  deviation "/if:interfaces/if:interface/if:statistics" {
+    deviate not-supported;
+  }
+
+  deviation "/if:interfaces-state" {
+    deviate not-supported;
+  }
+}

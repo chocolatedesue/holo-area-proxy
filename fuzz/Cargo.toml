@@ -1,0 +1,165 @@
+[package]
+name = "fuzz"
+version = "0.1.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+bytes = "1.10"
+const-addrs = { version = "0.1", features = ["ipnet"] }
+libfuzzer-sys = "0.4"
+yang5 = { version = "0.1", features = ["bundled"] }
+
+holo-bfd = { path = "../holo-bfd/" }
+holo-bgp = { path = "../holo-bgp/" }
+holo-isis = { path = "../holo-isis/" }
+holo-ldp = { path = "../holo-ldp/" }
+holo-ospf = { path = "../holo-ospf/" }
+holo-rip = { path = "../holo-rip/" }
+holo-utils = { path = "../holo-utils/" }
+holo-vrrp = { path = "../holo-vrrp/" }
+
+# ===== BFD fuzzers =====
+
+[[bin]]
+name = "bfd_packet_decode"
+path = "fuzz_targets/bfd/bfd_packet_decode.rs"
+
+# ===== BGP fuzzers =====
+
+[[bin]]
+name = "bgp_attrs_decode"
+path = "fuzz_targets/bgp/attrs_decode.rs"
+
+[[bin]]
+name = "bgp_ipv4_prefix_decode"
+path = "fuzz_targets/bgp/ipv4_prefix_decode.rs"
+
+[[bin]]
+name = "bgp_ipv6_prefix_decode"
+path = "fuzz_targets/bgp/ipv6_prefix_decode.rs"
+
+[[bin]]
+name = "bgp_message_decode"
+path = "fuzz_targets/bgp/message_decode.rs"
+
+# Invidual message types
+
+[[bin]]
+name = "bgp_message_keepalive_decode"
+path = "fuzz_targets/bgp/message/keepalive_decode.rs"
+
+[[bin]]
+name = "bgp_message_notification_decode"
+path = "fuzz_targets/bgp/message/notification_decode.rs"
+
+[[bin]]
+name = "bgp_message_open_capability_decode"
+path = "fuzz_targets/bgp/message/open_capability_decode.rs"
+
+[[bin]]
+name = "bgp_message_open_decode"
+path = "fuzz_targets/bgp/message/open_decode.rs"
+
+[[bin]]
+name = "bgp_message_routerefresh_decode"
+path = "fuzz_targets/bgp/message/routerefresh_decode.rs"
+
+[[bin]]
+name = "bgp_message_update_decode"
+path = "fuzz_targets/bgp/message/update_decode.rs"
+
+# Invidual attribute types
+
+[[bin]]
+name = "bgp_attr_aggregator_decode"
+path = "fuzz_targets/bgp/attribute/aggregator_decode.rs"
+
+[[bin]]
+name = "bgp_attr_as_path_decode"
+path = "fuzz_targets/bgp/attribute/as_path_decode.rs"
+
+[[bin]]
+name = "bgp_attr_as_path_segment_decode"
+path = "fuzz_targets/bgp/attribute/as_path_segment_decode.rs"
+
+[[bin]]
+name = "bgp_attr_comm_decode"
+path = "fuzz_targets/bgp/attribute/comm_decode.rs"
+
+[[bin]]
+name = "bgp_attr_ext_comm_decode"
+path = "fuzz_targets/bgp/attribute/ext_comm_decode.rs"
+
+[[bin]]
+name = "bgp_attr_extv6_comm_decode"
+path = "fuzz_targets/bgp/attribute/extv6_comm_decode.rs"
+
+[[bin]]
+name = "bgp_attr_large_comm_decode"
+path = "fuzz_targets/bgp/attribute/large_comm_decode.rs"
+
+[[bin]]
+name = "bgp_attr_mpreachnlri_decode"
+path = "fuzz_targets/bgp/attribute/mpreachnlri_decode.rs"
+
+# ===== IS-IS fuzzers =====
+
+[[bin]]
+name = "isis_pdu_decode"
+path = "fuzz_targets/isis/isis_pdu_decode.rs"
+
+# ===== LDP fuzzers =====
+
+[[bin]]
+name = "ldp_pdu_decode"
+path = "fuzz_targets/ldp/ldp_pdu_decode.rs"
+
+# ===== OSPF fuzzers =====
+
+[[bin]]
+name = "ospfv2_packet_decode"
+path = "fuzz_targets/ospf/ospfv2_packet_decode.rs"
+
+[[bin]]
+name = "ospfv2_lsa_decode"
+path = "fuzz_targets/ospf/ospfv2_lsa_decode.rs"
+
+[[bin]]
+name = "ospfv3_ipv4_packet_decode"
+path = "fuzz_targets/ospf/ospfv3_ipv4_packet_decode.rs"
+
+[[bin]]
+name = "ospfv3_ipv4_lsa_decode"
+path = "fuzz_targets/ospf/ospfv3_ipv4_lsa_decode.rs"
+
+[[bin]]
+name = "ospfv3_ipv6_packet_decode"
+path = "fuzz_targets/ospf/ospfv3_ipv6_packet_decode.rs"
+
+[[bin]]
+name = "ospfv3_ipv6_lsa_decode"
+path = "fuzz_targets/ospf/ospfv3_ipv6_lsa_decode.rs"
+
+# ===== RIP fuzzers =====
+
+[[bin]]
+name = "ripv2_pdu_decode"
+path = "fuzz_targets/rip/ripv2_pdu_decode.rs"
+
+[[bin]]
+name = "ripng_pdu_decode"
+path = "fuzz_targets/rip/ripng_pdu_decode.rs"
+
+# ===== VRRP fuzzers =====
+
+[[bin]]
+name = "vrrp_vrrphdr_ipv4_decode"
+path = "fuzz_targets/vrrp/vrrphdr_ipv4_decode.rs"
+
+[[bin]]
+name = "vrrp_vrrphdr_ipv6_decode"
+path = "fuzz_targets/vrrp/vrrphdr_ipv6_decode.rs"

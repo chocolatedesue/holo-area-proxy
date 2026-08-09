@@ -1,0 +1,280 @@
+module holo-ietf-bgp-deviations {
+  yang-version 1.1;
+  namespace "http://holo-routing.org/yang/holo-ietf-bgp-deviations";
+  prefix holo-ietf-bgp-deviations;
+
+  import ietf-routing {
+    prefix rt;
+  }
+
+  import ietf-bgp {
+    prefix bgp;
+  }
+
+  organization
+    "Holo Routing Stack";
+
+  description
+    "This module defines deviation statements for the ietf-bgp
+     module.";
+
+  /*
+   * Default values
+   */
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:global/bgp:distance/bgp:external" {
+    deviate add {
+      default "20";
+    }
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:global/bgp:distance/bgp:internal" {
+    deviate add {
+      default "200";
+    }
+  }
+
+  /*
+   * Other deviations
+   */
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:peer-as" {
+    deviate add {
+      mandatory "true";
+    }
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:session-state" {
+    deviate add {
+      config "false";
+    }
+  }
+
+  /*
+   * Not supported nodes
+   */
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:global/bgp:confederation" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:global/bgp:route-selection-options/bgp:advertise-inactive-routes" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:global/bgp:route-selection-options/bgp:enable-aigp" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:global/bgp:route-selection-options/bgp:med-plus-igp" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:global/bgp:afi-safis/bgp:afi-safi/bgp:route-selection-options/bgp:advertise-inactive-routes" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:global/bgp:afi-safis/bgp:afi-safi/bgp:route-selection-options/bgp:enable-aigp" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:global/bgp:afi-safis/bgp:afi-safi/bgp:route-selection-options/bgp:med-plus-igp" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:global/bgp:afi-safis/bgp:afi-safi/bgp:ipv4-unicast/bgp:prefix-limit/bgp:prefix-limit-exceeded" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:global/bgp:afi-safis/bgp:afi-safi/bgp:ipv6-unicast/bgp:prefix-limit/bgp:prefix-limit-exceeded" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:global/bgp:afi-safis/bgp:afi-safi/bgp:ipv4-labeled-unicast" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:global/bgp:afi-safis/bgp:afi-safi/bgp:ipv6-labeled-unicast" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:global/bgp:afi-safis/bgp:afi-safi/bgp:l3vpn-ipv4-unicast" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:global/bgp:afi-safis/bgp:afi-safi/bgp:l3vpn-ipv6-unicast" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:global/bgp:afi-safis/bgp:afi-safi/bgp:l3vpn-ipv4-multicast" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:global/bgp:afi-safis/bgp:afi-safi/bgp:l3vpn-ipv6-multicast" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:global/bgp:afi-safis/bgp:afi-safi/bgp:l2vpn-vpls" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:global/bgp:afi-safis/bgp:afi-safi/bgp:l2vpn-evpn" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:clear/bgp:input/bgp:clear-at" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:clear/bgp:output" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:backward-transition/bgp:notification-received/bgp:last-encapsulated-error" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:backward-transition/bgp:notification-received/bgp:last-encapsulated-error-code" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:backward-transition/bgp:notification-received/bgp:last-encapsulated-error-subcode" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:backward-transition/bgp:notification-sent/bgp:last-encapsulated-error" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:backward-transition/bgp:notification-sent/bgp:last-encapsulated-error-code" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:backward-transition/bgp:notification-sent/bgp:last-encapsulated-error-subcode" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:peer-group" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:transport/bgp:mtu-discovery" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:transport/bgp:secure-session/bgp:options/bgp:option/bgp:ao" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:transport/bgp:secure-session/bgp:options/bgp:option/bgp:md5/bgp:md5-keychain" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:transport/bgp:secure-session/bgp:options/bgp:option/bgp:ipsec" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:treat-as-withdraw" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:route-reflector" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:use-multiple-paths" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:prefix-limit/bgp:prefix-limit-exceeded" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:afi-safis/bgp:afi-safi/bgp:ipv4-unicast/bgp:prefix-limit/bgp:prefix-limit-exceeded" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:afi-safis/bgp:afi-safi/bgp:ipv6-unicast/bgp:prefix-limit/bgp:prefix-limit-exceeded" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:afi-safis/bgp:afi-safi/bgp:ipv4-labeled-unicast" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:afi-safis/bgp:afi-safi/bgp:ipv6-labeled-unicast" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:afi-safis/bgp:afi-safi/bgp:l3vpn-ipv4-unicast" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:afi-safis/bgp:afi-safi/bgp:l3vpn-ipv6-unicast" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:afi-safis/bgp:afi-safi/bgp:l3vpn-ipv4-multicast" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:afi-safis/bgp:afi-safi/bgp:l3vpn-ipv6-multicast" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:afi-safis/bgp:afi-safi/bgp:l2vpn-vpls" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:afi-safis/bgp:afi-safi/bgp:l2vpn-evpn" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:afi-safis/bgp:afi-safi/bgp:use-multiple-paths" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:capabilities/bgp:advertised-capabilities/bgp:value/bgp:graceful-restart" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:capabilities/bgp:received-capabilities/bgp:value/bgp:graceful-restart" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:errors/bgp:received/bgp:last-encapsulated-error" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:errors/bgp:received/bgp:last-encapsulated-error-code" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:errors/bgp:received/bgp:last-encapsulated-error-subcode" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:errors/bgp:sent/bgp:last-encapsulated-error" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:errors/bgp:sent/bgp:last-encapsulated-error-code" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:errors/bgp:sent/bgp:last-encapsulated-error-subcode" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:statistics/bgp:queues" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:peer-groups" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/bgp:bgp/bgp:rib/bgp:attr-sets/bgp:attr-set/bgp:attributes/bgp:aigp-metric" {
+    deviate not-supported;
+  }
+}

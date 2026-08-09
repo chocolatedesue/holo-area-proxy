@@ -1,0 +1,63 @@
+//
+// Copyright (c) The Holo Core Contributors
+//
+// SPDX-License-Identifier: MIT
+//
+
+use std::borrow::Cow;
+
+use holo_northbound::{YangObject, notification};
+use holo_utils::protocol::Protocol;
+
+use crate::instance::InstanceUpView;
+use crate::neighbor::Neighbor;
+use crate::northbound::yang_gen::bgp;
+use crate::northbound::yang_gen::routing::control_plane_protocols::control_plane_protocol;
+
+// ===== global functions =====
+
+pub(crate) fn established(instance: &InstanceUpView<'_>, nbr: &Neighbor) {
+    use bgp::neighbors::established::{self, Established};
+
+    let path = notification_path(instance.name, established::RELATIVE_PATH);
+    let data = Established {
+        remote_address: Some(nbr.remote_addr),
+    };
+    notification::send(&instance.tx.nb, path, data);
+}
+
+pub(crate) fn backward_transition(instance: &InstanceUpView<'_>, nbr: &Neighbor) {
+    use bgp::neighbors::backward_transition::notification_received::NotificationReceived;
+    use bgp::neighbors::backward_transition::notification_sent::NotificationSent;
+    use bgp::neighbors::backward_transition::{self, BackwardTransition};
+
+    let path = notification_path(instance.name, backward_transition::RELATIVE_PATH);
+    let data = BackwardTransition {
+        remote_addr: Some(nbr.remote_addr),
+        notification_received: nbr.notification_rcvd.as_ref().map(|(time, notif)| NotificationReceived {
+            last_notification: Some(*time),
+            last_error: Some(Cow::Borrowed(notif)),
+            last_error_code: Some(notif.error_code),
+            last_error_subcode: Some(notif.error_subcode),
+        }),
+        notification_sent: nbr.notification_sent.as_ref().map(|(time, notif)| NotificationSent {
+            last_notification: Some(*time),
+            last_error: Some(Cow::Borrowed(notif)),
+            last_error_code: Some(notif.error_code),
+            last_error_subcode: Some(notif.error_subcode),
+        }),
+    };
+    notification::send(&instance.tx.nb, path, data);
+}
+
+// ===== global functions =====
+
+fn notification_path(instance_name: &str, notification: &str) -> String {
+    use control_plane_protocol::ControlPlaneProtocol;
+
+    let control_plane_protocol = ControlPlaneProtocol {
+        r#type: Protocol::BGP,
+        name: instance_name.into(),
+    };
+    format!("{}{}{}", control_plane_protocol::PATH, control_plane_protocol.list_keys(), notification,)
+}

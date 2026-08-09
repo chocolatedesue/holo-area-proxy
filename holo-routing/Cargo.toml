@@ -1,0 +1,57 @@
+[package]
+name = "holo-routing"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+
+[dependencies]
+bitflags.workspace = true
+capctl.workspace = true
+chrono.workspace = true
+derive-new.workspace = true
+enum-as-inner.workspace = true
+futures.workspace = true
+generational-arena.workspace = true
+ipnetwork.workspace = true
+libc.workspace = true
+phf.workspace = true
+prefix-trie.workspace = true
+regex.workspace = true
+rtnetlink.workspace = true
+netlink-packet-core.workspace = true
+netlink-packet-route.workspace = true
+sysctl.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+yang5.workspace = true
+
+holo-northbound = { path = "../holo-northbound", features = ["routing"] }
+holo-protocol = { path = "../holo-protocol" }
+holo-utils = { path = "../holo-utils" }
+holo-yang = { path = "../holo-yang" }
+
+holo-bfd = { path = "../holo-bfd", optional = true }
+holo-bgp = { path = "../holo-bgp", optional = true }
+holo-igmp = { path = "../holo-igmp", optional = true }
+holo-isis = { path = "../holo-isis", optional = true }
+holo-ldp = { path = "../holo-ldp", optional = true }
+holo-ospf = { path = "../holo-ospf", optional = true }
+holo-rip = { path = "../holo-rip", optional = true }
+
+[build-dependencies]
+yang5 = { workspace = true, features = ["bundled"] }
+holo-northbound = { path = "../holo-northbound", features = ["routing"] }
+holo-yang = { path = "../holo-yang" }
+
+[lints]
+workspace = true
+
+[features]
+bfd = ["dep:holo-bfd"]
+bgp = ["dep:holo-bgp"]
+igmp = ["dep:holo-igmp"]
+isis = ["dep:holo-isis"]
+ldp = ["dep:holo-ldp"]
+ospf = ["dep:holo-ospf"]
+rip = ["dep:holo-rip"]

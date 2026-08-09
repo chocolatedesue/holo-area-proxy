@@ -1,0 +1,894 @@
+module holo-isis {
+  yang-version 1.1;
+  namespace "http://holo-routing.org/yang/holo-isis";
+  prefix holo-isis;
+
+  import ietf-yang-types {
+    prefix yang;
+  }
+
+  import ietf-inet-types {
+    prefix inet;
+  }
+
+  import ietf-routing-types {
+    prefix rt-types;
+  }
+
+  import ietf-routing {
+    prefix rt;
+  }
+
+  import ietf-isis {
+    prefix isis;
+  }
+
+  import ietf-te-types {
+    prefix te-types;
+  }
+
+  import ietf-isis-link-attr {
+    prefix isis-link-attr;
+  }
+
+  organization
+    "Holo Routing Stack";
+
+  description
+    "This module defines augment statements for the ietf-isis
+     module.";
+
+  /*
+   * Identities.
+   */
+
+  identity mt-topology {
+    description
+      "Base identity for IS-IS Multi-Topology (MT) types.";
+  }
+
+  identity mt-topology-standard {
+    base mt-topology;
+    description
+      "Standard topology (MT-ID 0)";
+  }
+
+  identity mt-topology-ipv6-unicast {
+    base mt-topology;
+    description
+      "IPv6 unicast topology (MT-ID 2)";
+  }
+
+  identity flooding-algorithm {
+    description
+      "Base identity for algorithms used to compute the flooding topology.";
+    reference
+      "draft-prz-lsr-interop-flood-reduction-architecture:
+       Flooding Reduction Algorithms Framework";
+  }
+
+  identity flooding-algorithm-zero-pruner {
+    base flooding-algorithm;
+    description
+      "Zero-pruner algorithm that uses the full flooding topology without
+       pruning.";
+    reference
+      "draft-prz-lsr-interop-flood-reduction-architecture:
+       Flooding Reduction Algorithms Framework";
+  }
+
+  identity flooding-algorithm-modified-manet {
+    base flooding-algorithm;
+    description
+      "Modified MANET flooding reduction algorithm.";
+    reference
+      "draft-ietf-lsr-distoptflood:
+       IS-IS Distributed Flooding Reduction";
+  }
+
+  /*
+   * Types.
+   */
+
+  typedef extended-sequence-number-mode {
+    type enumeration {
+      enum "send-only" {
+        description
+          "Enables sending of the Extended Sequence Number TLV on PDUs,
+           but does not enforce verification on received PDUs.";
+      }
+      enum "send-and-verify" {
+        description
+          "Enables sending of the Extended Sequence Number TLV and
+           enforces verification on incoming PDUs. PDUs without this TLV
+           or with invalid values will be discarded.";
+      }
+    }
+    description
+      "Configures the mode of operation for the Extended Sequence Number TLV.";
+  }
+
+  /*
+   * Groupings.
+   */
+
+  grouping bier-protocol-extensions {
+    description
+      "Defines protocol extensions.";
+    leaf mt-id {
+      type uint8;
+      description
+        "Multi-topology associated with bier sub-domain.";
+    }
+    container bier {
+      leaf enable {
+        type boolean;
+        default false;
+        description
+          "Enables bier protocol extensions.";
+      }
+      leaf advertise {
+        type boolean;
+        default true;
+        description
+          "Enable to advertise the parameters associated with bier.";
+      }
+      leaf receive {
+        type boolean;
+        default true;
+        description
+          "Enable to receive the parameters associated with bier.";
+      }
+      description
+        "BIER global config.";
+    }
+  }
+
+  grouping extended-sequence-number-cfg {
+    leaf mode {
+      type extended-sequence-number-mode;
+      description
+        "The operational mode for the Extended Sequence Number TLV on this
+         interface.";
+    }
+  }
+
+  /*
+   * Augmentations.
+   */
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/isis:isis" {
+    description
+      "IS-IS instance augmentations";
+    container attached-bit {
+      description "Configuration related to the ATT bit.";
+
+      leaf suppress-advertisement {
+        type boolean;
+        default false;
+        description
+          "When enabled, prevents the setting of the ATT bit in level 1
+           LSPs originated by this level 1/2 router. This ensures that
+           level 1 routers in the area do not install a default route
+           pointing to this router.";
+      }
+
+      leaf ignore-reception {
+        type boolean;
+        default false;
+        description
+          "When enabled, this level 1 router ignores the ATT bit in level
+           1 LSPs it receives. As a result, it will not install a default
+           route for any level 1/2 router that sets the ATT bit.";
+      }
+    }
+
+    container inter-level-propagation-policies {
+      description
+        "Configuration options to control the propagation of routing information
+         between IS-IS levels.";
+      container level1-to-level2 {
+        description
+          "Configuration options to control the propagation of routing
+           information from level 1 to level 2.";
+        list summary-prefixes {
+          description
+            "List of summarization prefixes";
+          key "prefix";
+          leaf prefix {
+            type inet:ip-prefix;
+            description
+              "The IP prefix to be advertised as a summary route into level 2.";
+          }
+          leaf metric {
+            type uint32;
+            description
+              "Optional metric value for the summary route. If not specified,
+               the lowest metric among the contributing more-specific level 1
+               routes is used.";
+          }
+        }
+      }
+    }
+
+    container flooding-reduction {
+      description
+        "Configuration for IS-IS flooding reduction extensions";
+      leaf algorithm {
+        type identityref {
+          base flooding-algorithm;
+        }
+        default holo-isis:flooding-algorithm-zero-pruner;
+        description
+          "Specifies the flooding reduction algorithm in use.";
+      }
+    }
+
+    container trace-options {
+      description "Instance level trace options for IS-IS.";
+
+      list flag {
+        key name;
+        description "List of tracing options.";
+        leaf name {
+          description
+            "List of tracing options";
+          type enumeration {
+            enum flood-reduction;
+            enum internal-bus;
+            enum lsdb;
+            enum packets-all;
+            enum packets-hello;
+            enum packets-psnp;
+            enum packets-csnp;
+            enum packets-lsp;
+            enum spf;
+          }
+        }
+        leaf send {
+          description "Trace sent packets.";
+          type boolean;
+          default true;
+        }
+        leaf receive {
+          description "Trace received packets.";
+          type boolean;
+          default true;
+        }
+      }
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/isis:isis/"
+        + "isis:address-families/isis:address-family-list" {
+    list redistribution {
+      key "level type";
+      description
+        "Parameters relating to route redistribution for the address family";
+
+      leaf level {
+        type isis:level-number;
+        description
+          "IS-IS level into which the routes are redistributed.";
+      }
+      leaf type {
+        type identityref {
+          base rt:control-plane-protocol;
+        }
+        description
+          "Type of the control-plane protocol -- an identity
+           derived from the 'control-plane-protocol'
+           base identity.";
+      }
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/isis:isis/"
+        + "isis:authentication/"
+        + "isis:authentication-type/isis:password" {
+     leaf key-id {
+      type uint16;
+      description
+        "Key identifier.";
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/isis:isis/"
+        + "isis:authentication/isis:level-1/"
+        + "isis:authentication-type/isis:password" {
+     leaf key-id {
+      type uint16;
+      description
+        "Key identifier.";
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/isis:isis/"
+        + "isis:authentication/isis:level-2/"
+        + "isis:authentication-type/isis:password" {
+     leaf key-id {
+      type uint16;
+      description
+        "Key identifier.";
+    }
+  }
+
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/isis:isis/"
+        + "isis:interfaces/isis:interface" {
+    description
+      "IS-IS interface augmentations";
+
+    leaf csnp-disable {
+      when "../isis:interface-type = 'point-to-point'";
+      type boolean;
+      default "false";
+      description
+        "If set to true, periodic CSNP PDUs are not transmitted on this
+         interface. A single CSNP is still transmitted when the IS-IS
+         adjacency is brought to the 'up' state.
+
+         This leaf is only applicable to point-to-point interfaces.";
+    }
+
+    container trace-options {
+      description "Interface level trace options for IS-IS.";
+
+      list flag {
+        key name;
+        description "List of tracing options.";
+        leaf name {
+          description
+            "List of tracing options";
+          type enumeration {
+            enum packets-all;
+            enum packets-hello;
+            enum packets-psnp;
+            enum packets-csnp;
+            enum packets-lsp;
+          }
+        }
+        leaf send {
+          description "Trace sent packets.";
+          type boolean;
+          default true;
+        }
+        leaf receive {
+          description "Trace received packets.";
+          type boolean;
+          default true;
+        }
+      }
+    }
+
+    leaf state {
+      config false;
+      type enumeration {
+        enum down {
+          description
+            "Interface is in the 'Down' state.";
+        }
+        enum up {
+          description
+            "Interface is in the 'Up' state.";
+        }
+      }
+      description
+        "Interface state.";
+    }
+    leaf circuit-id {
+      config false;
+      type isis:circuit-id;
+      description
+        "Interface circuit ID.";
+    }
+    leaf extended-circuit-id {
+      config false;
+      type isis:extended-circuit-id;
+      description
+        "Extended circuit ID of the interface.";
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/isis:isis/"
+        + "isis:interfaces/isis:interface/"
+        + "isis:hello-authentication/"
+        + "isis:authentication-type/isis:password" {
+     leaf key-id {
+      type uint16;
+      description
+        "Key identifier.";
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/isis:isis/"
+        + "isis:interfaces/isis:interface/"
+        + "isis:hello-authentication/isis:level-1/"
+        + "isis:authentication-type/isis:password" {
+     leaf key-id {
+      type uint16;
+      description
+        "Key identifier.";
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/isis:isis/"
+        + "isis:interfaces/isis:interface/"
+        + "isis:hello-authentication/isis:level-2/"
+        + "isis:authentication-type/isis:password" {
+     leaf key-id {
+      type uint16;
+      description
+        "Key identifier.";
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/isis:isis/"
+        + "isis:interfaces/isis:interface" {
+      container extended-sequence-number {
+        description
+          "Controls the advertisement and processing of the Extended Sequence
+           Number (ESN) TLV.";
+        uses extended-sequence-number-cfg;
+        container level-1 {
+          uses extended-sequence-number-cfg;
+          description
+            "Configuration specific to level 1.";
+        }
+        container level-2 {
+          uses extended-sequence-number-cfg;
+          description
+            "Configuration specific to level 2.";
+        }
+      }
+    reference
+      "RFC 7602: IS-IS Extended Sequence Number TLV";
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/isis:isis/"
+        + "isis:interfaces/isis:interface/"
+        + "isis:topologies/isis:topology" {
+    leaf enabled {
+      type boolean;
+      default "true";
+      description
+        "Enables or disables the topology.";
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/isis:isis/"
+        + "isis:interfaces/isis:interface/"
+        + "isis:adjacencies/isis:adjacency" {
+    description
+      "IS-IS interface adjacencies augmentations";
+    leaf-list area-addresses {
+      type isis:area-address;
+      description
+        "List of area addresses of the IS-IS node.  The IS-IS
+         reference is TLV 1.";
+    }
+    leaf-list ipv4-addresses {
+      type inet:ipv4-address;
+      description
+        "List of IPv4 addresses of the IS-IS node.  The IS-IS
+         reference is TLV 132.";
+    }
+    leaf-list ipv6-addresses {
+      type inet:ipv6-address;
+      description
+        "List of IPv6 addresses of the IS-IS node.  The IS-IS
+         reference is TLV 232.";
+    }
+    leaf-list protocol-supported {
+      type uint8;
+      description
+        "List of supported protocols of the IS-IS node.
+         The IS-IS reference is TLV 129.";
+    }
+    leaf-list topologies {
+      type uint16 {
+        range "0 .. 4095";
+      }
+      description
+        "List of topologies supported. The IS-IS reference is TLV 229.";
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/isis:isis/isis:database/"
+        + "isis:levels" {
+    leaf lsp-count {
+      type yang:gauge32;
+      description
+        "The number of LSPs at this level with non-zero remaining lifetime.";
+    }
+
+    container fingerprint {
+      description
+        "Information about the LSDB fingerprint for this level.";
+
+      leaf value {
+        type uint64;
+        description
+          "A 64-bit fingerprint derived from the set of LSPs at this level.
+
+           The fingerprint is computed by XOR-combining a per-LSP value
+           for each LSP whose remaining lifetime is non-zero.
+
+           The fingerprint is intended for detecting potential LSDB
+           synchronization differences. Different values indicate
+           different LSDB contents; identical values do not guarantee
+           equivalence due to possible collisions.";
+      }
+
+      leaf last-update {
+        type uint32;
+        units "seconds";
+        description
+          "Time elapsed since the fingerprint for this level's LSDB was
+           last updated.";
+      }
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/isis:isis/isis:database/"
+        + "isis:levels/isis:lsp" {
+    leaf-list area-addresses {
+      type isis:area-address;
+      description
+        "List of area addresses of the IS-IS node.  The IS-IS
+         reference is TLV 1.";
+    }
+    leaf lsp-buffer-size {
+      type uint16;
+      units "bytes";
+      description
+        "The maximum sized LSP which may be generated.
+         The IS-IS reference is TLV 14.";
+    }
+    leaf received-remaining-lifetime {
+      type uint16;
+      units "seconds";
+      description
+        "Remaining lifetime of this LSP at the time it was received.";
+    }
+    container purge-originator-identification {
+      leaf originator {
+        type isis:system-id;
+        description
+          "System ID of the router that generated the purged LSP.";
+      }
+      leaf received-from {
+        type isis:system-id;
+        description
+          "System ID of the neighboring router from which the purged LSP
+           was received.";
+      }
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/isis:isis/isis:database/"
+        + "isis:levels/isis:lsp/"
+        + "isis:router-capabilities/isis:router-capability" {
+    leaf flooding-algorithm {
+      type uint8;
+      description
+        "Flooding reduction algorithm in use by the IS-IS node.";
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/isis:isis/isis:spf-control/"
+        + "isis:ietf-spf-delay" {
+    list level {
+      config false;
+      key "level";
+      leaf level {
+        type isis:level-number;
+        description
+          "IS-IS level.";
+      }
+      leaf current-state {
+        type enumeration {
+          enum quiet {
+            description
+              "QUIET state.";
+          }
+          enum short-wait {
+            description
+              "SHORT_WAIT state.";
+          }
+          enum long-wait {
+            description
+              "LONG_WAIT state.";
+          }
+        }
+        config false;
+        description
+          "Current SPF Back-Off algorithm state.";
+      }
+      leaf remaining-time-to-learn {
+        type rt-types:timer-value-milliseconds;
+        units "msec";
+        config false;
+        description
+          "Remaining time until the time-to-learn timer fires.";
+      }
+      leaf remaining-hold-down {
+        type rt-types:timer-value-milliseconds;
+        units "msec";
+        config false;
+        description
+          "Remaining time until the hold-down timer fires.";
+      }
+      leaf last-event-received {
+        type yang:timestamp;
+        config false;
+        description
+          "Time of the last IGP event received.";
+      }
+      leaf next-spf-time {
+        type yang:timestamp;
+        config false;
+        description
+          "Time when the next SPF has been scheduled.";
+      }
+      leaf last-spf-time {
+        type yang:timestamp;
+        config false;
+        description
+          "Time of the last SPF computation.";
+      }
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+         + "rt:control-plane-protocol/isis:isis" {
+     description
+       "This augments IS-IS protocol configuration with bier.";
+       container bier {
+         uses bier-protocol-extensions;
+         description
+           "Control of bier advertisement and reception.";
+       }
+    }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/isis:isis" {
+    description
+      "This augments IS-IS protocol configuration with SPB
+       (Shortest Path Bridging) extensions.";
+    container spb {
+      description
+        "Shortest Path Bridging (SPB) configuration for IS-IS.";
+      reference
+        "RFC 6329: IS-IS Extensions Supporting IEEE 802.1aq
+         Shortest Path Bridging";
+      leaf enable {
+        type boolean;
+        default "false";
+        description
+          "Enables SPB extensions for IS-IS. When enabled, the router
+           will advertise NLPID 0xC1 (SPB) in the Protocols Supported
+           TLV (TLV 129) of IIH (Hello) PDUs.";
+        reference
+          "RFC 6329, Section 13: Shortest Path Bridging NLPID";
+      }
+      list service {
+        key "bmac base-vid";
+        description
+          "List of SPBM services to advertise via SPBM-SI Sub-TLV.
+           Each entry represents a B-MAC address with associated
+           service identifiers (I-SIDs).";
+        reference
+          "RFC 6329, Section 16.1: SPBM Service Identifier and
+           Unicast Address Sub-TLV";
+        leaf bmac {
+          type yang:mac-address;
+          description
+            "B-MAC (Backbone MAC) address. This is the unicast MAC
+             address used for SPBM forwarding. It can be the nodal
+             B-MAC or a per-service B-MAC.";
+        }
+        leaf base-vid {
+          type uint16 {
+            range "0..4095";
+          }
+          description
+            "Base VID (12 bits) that links this B-MAC to the
+             corresponding ECT-ALGORITHM and SPT Set defined in
+             the SPB-Inst Sub-TLV.";
+        }
+        list isid {
+          key "value";
+          description
+            "List of I-SID (Service Identifier) entries associated
+             with this B-MAC and Base VID combination.";
+          leaf value {
+            type uint32 {
+              range "0..16777215";
+            }
+            description
+              "24-bit I-SID (Service Identifier) value. This identifies
+               a specific service instance in the SPBM network.";
+          }
+          leaf transmit {
+            type boolean;
+            default "true";
+            description
+              "T bit: When true, indicates transmit membership for
+               this I-SID. The node will transmit frames for this
+               service.";
+          }
+          leaf receive {
+            type boolean;
+            default "true";
+            description
+              "R bit: When true, indicates receive membership for
+               this I-SID. The node will receive frames for this
+               service.";
+          }
+        }
+      }
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/isis:isis/"
+        + "isis:database/isis:levels/isis:lsp/"
+        + "isis:extended-is-neighbor/isis:neighbor/"
+        + "isis:instances/isis:instance" {
+    description
+      "Augments Extended IS neighbor instances with Extended
+       Administrative Group sub-TLV data (RFC 7308).";
+    leaf extended-admin-group {
+      type te-types:extended-admin-group;
+      description
+        "Extended Administrative Group.";
+      reference
+        "RFC 7308: Extended Administrative Groups in MPLS
+                   Traffic Engineering";
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/isis:isis/"
+        + "isis:database/isis:levels/isis:lsp/"
+        + "isis:mt-is-neighbor/isis:neighbor/"
+        + "isis:instances/isis:instance" {
+    description
+      "Augments MT IS neighbor instances with Extended
+       Administrative Group sub-TLV data (RFC 7308).";
+    leaf extended-admin-group {
+      type te-types:extended-admin-group;
+      description
+        "Extended Administrative Group.";
+      reference
+        "RFC 7308: Extended Administrative Groups in MPLS
+                   Traffic Engineering";
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/isis:isis/"
+        + "isis:database/isis:levels/isis:lsp/"
+        + "isis:extended-is-neighbor/isis:neighbor/"
+        + "isis:instances/isis:instance/"
+        + "isis-link-attr:asla-sub-tlvs/"
+        + "isis-link-attr:asla-sub-tlv" {
+    description
+      "Augments ASLA sub-TLV within Extended IS neighbor with
+       Extended Administrative Group sub-TLV data (RFC 7308).";
+    leaf extended-admin-group {
+      type te-types:extended-admin-group;
+      description
+        "Extended Administrative Group.";
+      reference
+        "RFC 7308: Extended Administrative Groups in MPLS
+                   Traffic Engineering";
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/isis:isis/"
+        + "isis:database/isis:levels/isis:lsp/"
+        + "isis:mt-is-neighbor/isis:neighbor/"
+        + "isis:instances/isis:instance/"
+        + "isis-link-attr:asla-sub-tlvs/"
+        + "isis-link-attr:asla-sub-tlv" {
+    description
+      "Augments ASLA sub-TLV within MT IS neighbor with
+       Extended Administrative Group sub-TLV data (RFC 7308).";
+    leaf extended-admin-group {
+      type te-types:extended-admin-group;
+      description
+        "Extended Administrative Group.";
+      reference
+        "RFC 7308: Extended Administrative Groups in MPLS
+                   Traffic Engineering";
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/isis:isis/isis:database/"
+        + "isis:levels/isis:lsp" {
+    description
+      "Augments LSP state with MT-Capability TLV information for SPB.";
+    list mt-capability {
+      config false;
+      description
+        "MT-Capability TLV (type 144) entries from this LSP.
+         Contains SPB service information.";
+      reference
+        "RFC 6329, Section 16: MT-Capability TLV";
+      leaf mt-id {
+        type uint16 {
+          range "0..4095";
+        }
+        description
+          "Multi-Topology ID.";
+      }
+      leaf overload {
+        type boolean;
+        description
+          "O-bit: When set, indicates the originating node is in
+           overload state for this topology.";
+      }
+      list spbm-service {
+        description
+          "SPBM-SI Sub-TLV entries (type 3) containing service
+           identifier and unicast address information.";
+        reference
+          "RFC 6329, Section 16.1: SPBM Service Identifier and
+           Unicast Address Sub-TLV";
+        leaf bmac {
+          type yang:mac-address;
+          description
+            "B-MAC (Backbone MAC) address for SPBM forwarding.";
+        }
+        leaf base-vid {
+          type uint16 {
+            range "0..4095";
+          }
+          description
+            "Base VID linking to ECT-ALGORITHM and SPT Set.";
+        }
+        list isid {
+          description
+            "I-SID (Service Identifier) entries.";
+          leaf value {
+            type uint32 {
+              range "0..16777215";
+            }
+            description
+              "24-bit I-SID value.";
+          }
+          leaf transmit {
+            type boolean;
+            description
+              "T bit: Transmit membership for this I-SID.";
+          }
+          leaf receive {
+            type boolean;
+            description
+              "R bit: Receive membership for this I-SID.";
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,69 @@
+[package]
+name = "holo-bgp"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+
+[dependencies]
+twox-hash = { version = "2.0", optional = true }
+
+arbitrary.workspace = true
+arc-swap.workspace = true
+bitflags.workspace = true
+bytes.workspace = true
+chrono.workspace = true
+crossbeam-channel.workspace = true
+derive-new.workspace = true
+enum-as-inner.workspace = true
+generational-arena.workspace = true
+ipnetwork.workspace = true
+itertools.workspace = true
+libc.workspace = true
+num-derive.workspace = true
+num-traits.workspace = true
+phf.workspace = true
+prefix-trie.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_with.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+yang5.workspace = true
+
+holo-northbound = { path = "../holo-northbound", features = ["bgp"] }
+holo-protocol = { path = "../holo-protocol" }
+holo-utils = { path = "../holo-utils" }
+holo-yang = { path = "../holo-yang" }
+
+[dev-dependencies]
+const-addrs.workspace = true
+criterion.workspace = true
+yang5 = { workspace = true, features = ["bundled"] }
+
+holo-bgp = { path = ".", features = ["testing", "deterministic"] }
+holo-northbound = { path = "../holo-northbound", features = ["testing"] }
+holo-protocol = { path = "../holo-protocol", features = ["testing"] }
+holo-utils = { path = "../holo-utils", features = ["testing"] }
+
+[build-dependencies]
+yang5 = { workspace = true, features = ["bundled"] }
+holo-northbound = { path = "../holo-northbound", features = ["bgp"] }
+holo-yang = { path = "../holo-yang" }
+
+[lints]
+workspace = true
+
+[features]
+default = []
+testing = []
+deterministic = ["dep:twox-hash"]
+
+[[bench]]
+name = "msg_encoding"
+harness = false
+
+[[bench]]
+name = "msg_decoding"
+harness = false

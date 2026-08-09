@@ -1,0 +1,62 @@
+[package]
+name = "holo-ldp"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+
+[dependencies]
+bitflags.workspace = true
+bytes.workspace = true
+chrono.workspace = true
+const-addrs.workspace = true
+derive-new.workspace = true
+generational-arena.workspace = true
+ipnetwork.workspace = true
+libc.workspace = true
+maplit.workspace = true
+num-derive.workspace = true
+num-traits.workspace = true
+phf.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_with.workspace = true
+socket2.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+yang5.workspace = true
+
+holo-northbound = { path = "../holo-northbound", features = ["ldp"] }
+holo-protocol = { path = "../holo-protocol" }
+holo-utils = { path = "../holo-utils" }
+holo-yang = { path = "../holo-yang" }
+
+[dev-dependencies]
+criterion.workspace = true
+yang5 = { workspace = true, features = ["bundled"] }
+
+holo-ldp = { path = ".", features = ["testing", "deterministic"] }
+holo-northbound = { path = "../holo-northbound", features = ["testing"] }
+holo-protocol = { path = "../holo-protocol", features = ["testing"] }
+holo-utils = { path = "../holo-utils", features = ["testing"] }
+
+[build-dependencies]
+yang5 = { workspace = true, features = ["bundled"] }
+holo-northbound = { path = "../holo-northbound", features = ["ldp"] }
+holo-yang = { path = "../holo-yang" }
+
+[lints]
+workspace = true
+
+[features]
+default = []
+testing = []
+deterministic = []
+
+[[bench]]
+name = "pdu_encoding"
+harness = false
+
+[[bench]]
+name = "pdu_decoding"
+harness = false

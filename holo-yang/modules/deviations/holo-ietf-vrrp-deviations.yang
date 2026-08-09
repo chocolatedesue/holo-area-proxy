@@ -1,0 +1,82 @@
+module holo-ietf-vrrp-deviations {
+  yang-version 1.1;
+  namespace "http://holo-routing.org/yang/holo-ietf-vrrp-deviations";
+  prefix holo-ietf-vrrp-deviations;
+
+  import ietf-interfaces {
+    prefix if;
+  }
+
+  import ietf-ip {
+    prefix ip;
+  }
+
+  import ietf-vrrp {
+    prefix vrrp;
+  }
+
+  organization
+    "Holo Routing Stack";
+
+  description
+    "This module defines deviation statements for the ietf-vrrp
+     module.";
+
+  /*
+   * Default values
+   */
+
+  deviation "/if:interfaces/if:interface/ip:ipv4/vrrp:vrrp/vrrp:vrrp-instance/vrrp:version" {
+    deviate replace {
+      mandatory false;
+    }
+    deviate add {
+      default "vrrp:vrrp-v2";
+    }
+  }
+
+  deviation "/if:interfaces/if:interface/ip:ipv6/vrrp:vrrp/vrrp:vrrp-instance/vrrp:version" {
+    deviate replace {
+      mandatory false;
+    }
+    deviate add {
+      default "vrrp:vrrp-v3";
+    }
+  }
+
+  /*
+   * Not supported nodes
+   */
+
+  deviation "/if:interfaces/if:interface/ip:ipv4/vrrp:vrrp/vrrp:vrrp-instance/vrrp:preempt/vrrp:hold-time" {
+    deviate not-supported;
+  }
+
+  deviation "/if:interfaces/if:interface/ip:ipv4/vrrp:vrrp/vrrp:vrrp-instance/vrrp:accept-mode" {
+    deviate not-supported;
+  }
+
+  deviation "/if:interfaces/if:interface/ip:ipv4/vrrp:vrrp/vrrp:vrrp-instance/vrrp:track" {
+    deviate not-supported;
+  }
+
+  deviation "/if:interfaces/if:interface/ip:ipv6/vrrp:vrrp/vrrp:vrrp-instance/vrrp:preempt/vrrp:hold-time" {
+    deviate not-supported;
+  }
+
+  deviation "/if:interfaces/if:interface/ip:ipv6/vrrp:vrrp/vrrp:vrrp-instance/vrrp:accept-mode" {
+    deviate not-supported;
+  }
+
+  deviation "/if:interfaces/if:interface/ip:ipv6/vrrp:vrrp/vrrp:vrrp-instance/vrrp:track" {
+    deviate not-supported;
+  }
+
+  deviation "/vrrp:vrrp" {
+    deviate not-supported;
+  }
+
+  deviation "/vrrp:vrrp-virtual-router-error-event/vrrp:ip-version" {
+    deviate not-supported;
+  }
+}

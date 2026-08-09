@@ -1,0 +1,229 @@
+//
+// Copyright (c) The Holo Core Contributors
+//
+// SPDX-License-Identifier: MIT
+//
+
+use std::sync::LazyLock as Lazy;
+
+use const_addrs::{ip4, ip6, net4, net6};
+use holo_bgp::neighbor::PeerType;
+use holo_bgp::packet::attribute::{
+    Aggregator, AsPath, AsPathSegment, AsPathSegmentType, Attrs, BaseAttrs,
+    ClusterList, CommList,
+};
+use holo_bgp::packet::iana::Origin;
+use holo_bgp::packet::message::{
+    DecodeCxt, EncodeCxt, Message, MpReachNlri, MpUnreachNlri,
+    NegotiatedCapability, ReachNlri, UnreachNlri, UpdateMsg,
+};
+use holo_utils::bgp::{Comm, ExtComm, Extv6Comm, LargeComm};
+
+use super::{test_decode_msg, test_encode_msg};
+
+static UPDATE1: Lazy<(Vec<u8>, Message)> = Lazy::new(|| {
+    (
+        vec![
+            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+            0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x17, 0x02, 0x00, 0x00, 0x00,
+            0x00,
+        ],
+        Message::Update(UpdateMsg {
+            reach: None,
+            unreach: None,
+            mp_reach: None,
+            mp_unreach: None,
+            attrs: None,
+        }),
+    )
+});
+
+static UPDATE2: Lazy<(Vec<u8>, Message)> = Lazy::new(|| {
+    (
+        vec![
+            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+            0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0x29, 0x02, 0x00, 0x08, 0x18,
+            0x0a, 0x00, 0x01, 0x18, 0x0a, 0x00, 0x02, 0x01, 0x00, 0x90, 0x0e,
+            0x00, 0x47, 0x00, 0x02, 0x01, 0x20, 0x30, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+            0xfe, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x42, 0x07, 0xbd,
+            0x19, 0x11, 0x1c, 0x84, 0x11, 0x00, 0x80, 0x20, 0x01, 0x0d, 0xb8,
+            0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x01, 0x80, 0x20, 0x01, 0x0d, 0xb8, 0x00, 0x01, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x90, 0x0f, 0x00, 0x25,
+            0x00, 0x02, 0x01, 0x80, 0x20, 0x01, 0x0d, 0xb8, 0x00, 0x02, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x80, 0x20,
+            0x01, 0x0d, 0xb8, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x02, 0x40, 0x01, 0x01, 0x00, 0x50, 0x02, 0x00,
+            0x0e, 0x02, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02,
+            0x00, 0x00, 0x00, 0x03, 0x40, 0x03, 0x04, 0x01, 0x01, 0x01, 0x01,
+            0x80, 0x04, 0x04, 0x00, 0x00, 0x01, 0xf4, 0x40, 0x05, 0x04, 0x00,
+            0x00, 0x01, 0xf4, 0x40, 0x06, 0x00, 0xc0, 0x07, 0x08, 0x00, 0x00,
+            0x03, 0xe8, 0x02, 0x02, 0x02, 0x02, 0xd0, 0x08, 0x00, 0x0c, 0x00,
+            0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x03,
+            0x80, 0x09, 0x04, 0x01, 0x01, 0x01, 0x01, 0x90, 0x0a, 0x00, 0x04,
+            0x03, 0x03, 0x03, 0x03, 0xd0, 0x10, 0x00, 0x08, 0x00, 0x00, 0x00,
+            0x01, 0x00, 0x00, 0x00, 0x01, 0xd0, 0x19, 0x00, 0x14, 0x20, 0x01,
+            0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0xd0, 0x20, 0x00, 0x0c,
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x01, 0x20, 0x0a, 0x00, 0xff, 0x01, 0x20, 0x0a, 0x00, 0xff, 0x02,
+        ],
+        Message::Update(UpdateMsg {
+            reach: Some(ReachNlri {
+                prefixes: vec![net4!("10.0.255.1/32"), net4!("10.0.255.2/32")],
+                nexthop: ip4!("1.1.1.1"),
+            }),
+            unreach: Some(UnreachNlri {
+                prefixes: vec![net4!("10.0.1.0/24"), net4!("10.0.2.0/24")],
+            }),
+            mp_reach: Some(MpReachNlri::Ipv6Unicast {
+                prefixes: vec![
+                    net6!("2001:db8:1::1/128"),
+                    net6!("2001:db8:1::2/128"),
+                ],
+                nexthop: ip6!("3000::1"),
+                ll_nexthop: Some(ip6!("fe80::4207:bd19:111c:8411")),
+            }),
+            mp_unreach: Some(MpUnreachNlri::Ipv6Unicast {
+                prefixes: vec![
+                    net6!("2001:db8:2::1/128"),
+                    net6!("2001:db8:2::2/128"),
+                ],
+            }),
+            attrs: Some(Attrs {
+                base: BaseAttrs {
+                    origin: Origin::Igp,
+                    as_path: AsPath {
+                        segments: [AsPathSegment {
+                            seg_type: AsPathSegmentType::Sequence,
+                            members: [1, 2, 3].into(),
+                        }]
+                        .into(),
+                    },
+                    as4_path: None,
+                    nexthop: None,
+                    ll_nexthop: None,
+                    med: Some(500),
+                    local_pref: Some(500),
+                    aggregator: Some(Aggregator {
+                        asn: 1000,
+                        identifier: ip4!("2.2.2.2"),
+                    }),
+                    as4_aggregator: None,
+                    atomic_aggregate: Some(()),
+                    originator_id: Some(ip4!("1.1.1.1")),
+                    cluster_list: Some(ClusterList(vec![ip4!("3.3.3.3")])),
+                },
+                comm: Some(CommList([Comm(1), Comm(2), Comm(3)].into())),
+                ext_comm: Some(CommList(
+                    [ExtComm([0, 0, 0, 1, 0, 0, 0, 1])].into(),
+                )),
+                extv6_comm: Some(CommList(
+                    [Extv6Comm(ip6!("2001:db8::1"), 1)].into(),
+                )),
+                large_comm: Some(CommList(
+                    [LargeComm([0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1])].into(),
+                )),
+                unknown: None,
+            }),
+        }),
+    )
+});
+
+#[test]
+fn test_encode_update1() {
+    let (ref bytes, ref msg) = *UPDATE1;
+    test_encode_msg(bytes, msg);
+}
+
+#[test]
+fn test_decode_update1() {
+    let (ref bytes, ref msg) = *UPDATE1;
+    test_decode_msg(bytes, msg);
+}
+
+#[test]
+fn test_encode_update2() {
+    let (ref bytes, ref msg) = *UPDATE2;
+    test_encode_msg(bytes, msg);
+}
+
+#[test]
+fn test_decode_update2() {
+    let (ref bytes, ref msg) = *UPDATE2;
+    test_decode_msg(bytes, msg);
+}
+
+#[test]
+fn test_decode_malformed_updates() {
+    let cxt: DecodeCxt = DecodeCxt {
+        peer_type: PeerType::Internal,
+        peer_as: 65550,
+        reject_as_sets: true,
+        capabilities: [NegotiatedCapability::FourOctetAsNumber].into(),
+    };
+    for bytes in &[
+        // Missing NEXT_HOP attribute.
+        vec![
+            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+            0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x1c, 0x02, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00,
+        ],
+        // Malformed message length.
+        vec![
+            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+            0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x1b, 0x02, 0x00, 0x00, 0x00,
+            0x2d, 0x00, 0x00, 0x00, 0xf5, 0x00, 0x00, 0x00, 0x00, 0x14, 0x9f,
+            0x49, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0x00, 0x14, 0x9f, 0x49,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x2d, 0x00, 0x00, 0x00, 0xf5, 0x00,
+            0x00, 0x00, 0x00, 0x14, 0x9f, 0x49, 0x00, 0x00, 0xff, 0x00, 0x00,
+            0x00, 0x00, 0x14, 0x9f, 0x49, 0x00, 0x00,
+        ],
+    ] {
+        if let Some(msg_size) = Message::get_message_len(bytes) {
+            let _ = Message::decode(&bytes[0..msg_size], &cxt);
+        }
+    }
+}
+
+// Regression: a withdraw-only UPDATE whose sole path attribute is
+// MP_UNREACH_NLRI (i.e. `attrs` is None) must still encode that attribute.
+// Otherwise the message has an empty attribute section and is byte-identical
+// to an End-of-RIB marker (23 bytes), which silently drops the withdrawal.
+#[test]
+fn test_encode_mp_unreach_only_update() {
+    let encode_cxt = EncodeCxt {
+        capabilities: [NegotiatedCapability::FourOctetAsNumber].into(),
+    };
+    let msg = Message::Update(UpdateMsg {
+        reach: None,
+        unreach: None,
+        mp_reach: None,
+        mp_unreach: Some(MpUnreachNlri::Ipv6Unicast {
+            prefixes: vec![net6!("2001:db8:2::1/128")],
+        }),
+        attrs: None,
+    });
+
+    let bytes = msg.encode(&encode_cxt);
+
+    // Must not collapse to the 23-byte End-of-RIB marker...
+    assert_ne!(bytes.len(), 23);
+
+    // ...and must round-trip back to the same message.
+    let decode_cxt = DecodeCxt {
+        peer_type: PeerType::Internal,
+        peer_as: 65550,
+        reject_as_sets: true,
+        capabilities: [NegotiatedCapability::FourOctetAsNumber].into(),
+    };
+    let msg_size = Message::get_message_len(&bytes)
+        .expect("Buffer doesn't contain a full BGP message");
+    let decoded = Message::decode(&bytes[0..msg_size], &decode_cxt).unwrap();
+    assert_eq!(decoded, msg);
+}

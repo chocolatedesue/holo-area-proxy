@@ -1,0 +1,35 @@
+[package]
+name = "holo-yang"
+version = "0.5.6"
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+description = "YANG module of Holo Routing, including embedded YANG models and utility code"
+
+[dependencies]
+base64.workspace = true
+chrono.workspace = true
+ipnetwork.workspace = true
+maplit.workspace = true
+serde.workspace = true
+tracing.workspace = true
+yang5.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+interface = []
+keychain = []
+policy = []
+routing = []
+system = []
+bfd = []
+bgp = []
+igmp = []
+isis = []
+ldp = []
+ospf = []
+rip = []
+vrrp = []

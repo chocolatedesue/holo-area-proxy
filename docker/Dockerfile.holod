@@ -1,0 +1,46 @@
+# syntax=docker/dockerfile:1
+
+# Build image
+# ==============================================================================
+
+FROM rust:trixie AS build
+
+RUN apt-get update && \
+    apt-get install -y build-essential \
+    cmake \
+    libpcre2-dev \
+    protobuf-compiler
+
+ARG BUILD_PROFILE=release
+ARG GIT_HASH
+ENV GIT_HASH=${GIT_HASH}
+
+WORKDIR /usr/src/holo
+COPY . .
+# Cache the Cargo registry and target directory across builds so Cargo can do
+# incremental compilation instead of rebuilding from scratch every time.
+#
+# The target directory lives in a cache mount, which is not persisted in the
+# image layer, so the binary is copied out to /usr/src/holo/holod. Cargo's "dev"
+# profile outputs to target/debug; every other profile uses its own name.
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/src/holo/target \
+    cargo build --profile $BUILD_PROFILE && \
+    cp target/$([ "$BUILD_PROFILE" = dev ] && echo debug || echo "$BUILD_PROFILE")/holod /usr/src/holo/holod
+
+# Final base
+# ==============================================================================
+
+FROM debian:trixie-slim
+
+RUN groupadd -r holo
+RUN useradd --system --shell /sbin/nologin --home-dir /var/opt/holo/ -g holo holo
+RUN mkdir -p /var/opt/holo
+RUN chown holo:holo /var/opt/holo
+
+COPY --from=build /usr/src/holo/holo-daemon/holod.toml /etc/holod.toml
+COPY --from=build /usr/src/holo/holod /usr/local/sbin/
+
+ENV RUST_BACKTRACE=1
+ENV RUST_LOG=holo=debug
+ENTRYPOINT ["sh", "-c", "holod 2>> /tmp/holod.err"]

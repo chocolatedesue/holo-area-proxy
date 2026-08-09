@@ -1,0 +1,107 @@
+module holo-ietf-rip-deviations {
+  yang-version 1.1;
+  namespace "http://holo-routing.org/yang/holo-ietf-rip-deviations";
+  prefix holo-ietf-rip-deviations;
+
+  import ietf-routing {
+    prefix rt;
+  }
+
+  import ietf-rip {
+    prefix rip;
+  }
+
+  import ietf-key-chain {
+    prefix key-chain;
+  }
+
+  organization
+    "Holo Routing Stack";
+
+  description
+    "This module defines deviation statements for the ietf-rip
+     module.";
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/rip:rip/rip:originate-default-route" {
+    deviate not-supported;
+  }
+
+  /*
+   * Added constraints
+   */
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/rip:rip/rip:interfaces/rip:interface/rip:authentication/rip:auth-type-selection/rip:auth-key/rip:crypto-algorithm" {
+    deviate add {
+      must 'derived-from-or-self(., "key-chain:md5")' {
+        error-message
+          "Unsupported cryptographic algorithm.";
+      }
+    }
+  }
+
+  /*
+   * Not supported nodes
+   */
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/rip:rip/rip:distribute-list" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/rip:rip/rip:redistribute" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/rip:rip/rip:maximum-paths" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/rip:rip/rip:output-delay" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/rip:rip/rip:timers/rip:holddown-interval" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/rip:rip/rip:interfaces/rip:interface/rip:authentication/rip:auth-type-selection/rip:auth-key-chain" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/rip:rip/rip:interfaces/rip:interface/rip:originate-default-route" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/rip:rip/rip:interfaces/rip:interface/rip:summary-address" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/rip:rip/rip:interfaces/rip:interface/rip:timers" {
+    deviate delete {
+      must 'invalid-interval >= (update-interval * 3)';
+    }
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/rip:rip/rip:interfaces/rip:interface/rip:timers/rip:update-interval" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/rip:rip/rip:interfaces/rip:interface/rip:timers/rip:holddown-interval" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/rip:rip/rip:ipv4/rip:routes/rip:route/rip:holddown" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/rip:rip/rip:ipv4/rip:routes/rip:route/rip:flush-expire-before-holddown" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/rip:rip/rip:ipv6/rip:routes/rip:route/rip:holddown" {
+    deviate not-supported;
+  }
+
+  deviation "/rt:routing/rt:control-plane-protocols/rt:control-plane-protocol/rip:rip/rip:ipv6/rip:routes/rip:route/rip:flush-expire-before-holddown" {
+    deviate not-supported;
+  }
+}

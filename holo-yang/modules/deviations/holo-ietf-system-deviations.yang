@@ -1,0 +1,40 @@
+module holo-ietf-system-deviations {
+  yang-version 1.1;
+  namespace "http://holo-routing.org/yang/holo-ietf-system-deviations";
+  prefix holo-ietf-system-deviations;
+
+  import ietf-system {
+    prefix sys;
+  }
+
+  organization
+    "Holo Routing Stack";
+
+  description
+    "This module defines deviation statements for the ietf-system
+     module.";
+
+  /*
+   * Not supported nodes
+   */
+
+  deviation "/sys:system/sys:clock" {
+    deviate not-supported;
+  }
+
+  deviation "/sys:system/sys:dns-resolver" {
+    deviate not-supported;
+  }
+
+  deviation "/sys:set-current-datetime" {
+    deviate not-supported;
+  }
+
+  deviation "/sys:system-restart" {
+    deviate not-supported;
+  }
+
+  deviation "/sys:system-shutdown" {
+    deviate not-supported;
+  }
+}

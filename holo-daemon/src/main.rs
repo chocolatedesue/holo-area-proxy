@@ -1,0 +1,307 @@
+//
+// Copyright (c) The Holo Core Contributors
+//
+// SPDX-License-Identifier: MIT
+//
+
+mod config;
+mod northbound;
+
+use std::path::Path;
+
+use capctl::caps;
+use clap::{App, Arg};
+use config::{Config, LoggingFileRotation, LoggingFmtStyle};
+use nix::fcntl::{Flock, FlockArg};
+use nix::unistd::{Uid, User};
+use northbound::Northbound;
+use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
+use tokio::signal::unix::{SignalKind, signal};
+use tokio::sync::mpsc;
+use tracing::info;
+use tracing::level_filters::LevelFilter;
+use tracing_appender::rolling;
+use tracing_subscriber::Layer;
+use tracing_subscriber::prelude::*;
+
+// jemalloc tends to fragment less than glibc malloc for routing workloads,
+// returning freed memory to the OS more aggressively.
+#[cfg(feature = "jemalloc")]
+#[global_allocator]
+static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+
+// Path for the exclusive flock(2) used to prevent concurrent instances.
+const INSTANCE_LOCK_PATH: &str = "/var/opt/holo/holod.lock";
+
+fn ensure_single_instance() -> Flock<std::fs::File> {
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(INSTANCE_LOCK_PATH)
+        .unwrap_or_else(|err| {
+            eprintln!(
+                "failed to open instance lock file {INSTANCE_LOCK_PATH}: {err}"
+            );
+            std::process::exit(1);
+        });
+
+    match Flock::lock(file, FlockArg::LockExclusiveNonblock) {
+        Ok(lock) => lock,
+        Err((_, errno)) => {
+            if errno == nix::errno::Errno::EAGAIN {
+                eprintln!("another instance of holod is already running");
+            } else {
+                eprintln!(
+                    "failed to acquire instance lock on {INSTANCE_LOCK_PATH}: {errno}"
+                );
+            }
+            std::process::exit(1);
+        }
+    }
+}
+
+fn init_tracing(config: &config::Logging) {
+    // Enable logging to journald.
+    let journald = config.journald.enabled.then(|| {
+        tracing_journald::layer().expect("couldn't connect to journald")
+    });
+
+    // Enable logging to a file.
+    let file = config.file.enabled.then(|| {
+        let file_appender = match config.file.rotation {
+            LoggingFileRotation::Never => {
+                rolling::never(&config.file.dir, &config.file.name)
+            }
+            LoggingFileRotation::Hourly => {
+                rolling::hourly(&config.file.dir, &config.file.name)
+            }
+            LoggingFileRotation::Daily => {
+                rolling::daily(&config.file.dir, &config.file.name)
+            }
+        };
+
+        let log_level_filter = LevelFilter::from_level(tracing::Level::TRACE);
+        let layer = tracing_subscriber::fmt::layer()
+            .with_writer(file_appender)
+            .with_target(false)
+            .with_thread_ids(config.file.fmt.show_thread_id)
+            .with_file(config.file.fmt.show_source)
+            .with_line_number(config.file.fmt.show_source)
+            .with_ansi(config.file.fmt.colors);
+        let layer = match config.file.fmt.style {
+            LoggingFmtStyle::Compact => layer.compact().boxed(),
+            LoggingFmtStyle::Full => layer.boxed(),
+            LoggingFmtStyle::Json => layer.json().boxed(),
+            LoggingFmtStyle::Pretty => layer.pretty().boxed(),
+        };
+        layer.with_filter(log_level_filter)
+    });
+
+    // Enable logging to stdout.
+    let stdout = config.stdout.enabled.then(|| {
+        let log_level_filter = LevelFilter::from_level(tracing::Level::TRACE);
+        let layer = tracing_subscriber::fmt::layer()
+            .with_target(false)
+            .with_thread_ids(config.stdout.fmt.show_thread_id)
+            .with_file(config.stdout.fmt.show_source)
+            .with_line_number(config.stdout.fmt.show_source)
+            .with_ansi(config.stdout.fmt.colors);
+        let layer = match config.stdout.fmt.style {
+            LoggingFmtStyle::Compact => layer.compact().boxed(),
+            LoggingFmtStyle::Full => layer.boxed(),
+            LoggingFmtStyle::Json => layer.json().boxed(),
+            LoggingFmtStyle::Pretty => layer.pretty().boxed(),
+        };
+        layer.with_filter(log_level_filter)
+    });
+
+    // Configure the tracing fmt layer.
+    #[cfg(feature = "tokio_console")]
+    {
+        // Enable tokio-console instrumentation.
+        let console = console_subscriber::spawn();
+        let env_filter = tracing_subscriber::EnvFilter::builder()
+            .with_default_directive("holo=debug".parse().unwrap())
+            .from_env_lossy();
+        // Enable targets needed by the console.
+        let env_filter = env_filter
+            .add_directive("tokio=trace".parse().unwrap())
+            .add_directive("runtime=trace".parse().unwrap());
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(journald)
+            .with(file)
+            .with(stdout)
+            .with(console)
+            .init();
+    }
+    #[cfg(not(feature = "tokio_console"))]
+    {
+        let env_filter = tracing_subscriber::EnvFilter::builder()
+            .with_default_directive("holo=debug".parse().unwrap())
+            .from_env_lossy();
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(journald)
+            .with(file)
+            .with(stdout)
+            .init();
+    }
+}
+
+fn init_db<P: AsRef<Path>>(
+    path: P,
+) -> Result<PickleDb, pickledb::error::Error> {
+    let dump_policy = PickleDbDumpPolicy::AutoDump;
+    let serialization_method = SerializationMethod::Bin;
+    match path.as_ref().exists() {
+        true => PickleDb::load(path, dump_policy, serialization_method),
+        false => Ok(PickleDb::new(path, dump_policy, serialization_method)),
+    }
+}
+
+fn privdrop(user: &str) -> nix::Result<()> {
+    // Preserve set of permitted capabilities upon privdrop.
+    capctl::prctl::set_securebits(capctl::prctl::Secbits::KEEP_CAPS).unwrap();
+
+    // Drop to unprivileged user and group.
+    if let Some(user) = User::from_name(user)? {
+        nix::unistd::setgroups(&[user.gid])?;
+        nix::unistd::setresgid(user.gid, user.gid, user.gid)?;
+        nix::unistd::setresuid(user.uid, user.uid, user.uid)?;
+    } else {
+        eprintln!("failed to find user {user}");
+        std::process::exit(1);
+    }
+
+    // Set permitted capabilities.
+    let mut caps = caps::CapState::empty();
+    for cap in [
+        caps::Cap::NET_ADMIN,
+        caps::Cap::NET_BIND_SERVICE,
+        caps::Cap::NET_RAW,
+    ] {
+        caps.permitted.add(cap);
+    }
+    if let Err(error) = caps.set_current() {
+        eprintln!("failed to set permitted capabilities: {error}");
+    }
+
+    Ok(())
+}
+
+fn signal_listener() -> mpsc::Receiver<()> {
+    let (signal_tx, signal_rx) = mpsc::channel(1);
+
+    tokio::task::spawn(async move {
+        let mut sigint = signal(SignalKind::interrupt()).unwrap();
+        let mut sigterm = signal(SignalKind::terminate()).unwrap();
+
+        tokio::select! {
+            _ = sigint.recv() => {
+                info!("received SIGINT");
+                let _ = signal_tx.send(()).await;
+            },
+            _ = sigterm.recv() => {
+                info!("received SIGTERM");
+                let _ = signal_tx.send(()).await;
+            }
+        }
+    });
+
+    signal_rx
+}
+
+fn build_version() -> String {
+    const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+    // Resolve the commit SHA at compile time.
+    //
+    // Docker and CI builds do not include the .git directory, so git metadata
+    // is unavailable. In those cases, the commit SHA is injected via the
+    // GIT_HASH environment variable. For local builds with access to .git,
+    // fall back to querying the repository directly.
+    let git_hash = option_env!("GIT_HASH")
+        .map(String::from)
+        .or_else(|| rustc_tools_util::get_version_info!().commit_hash);
+
+    match git_hash {
+        Some(hash) => format!("{VERSION} ({hash})"),
+        None => VERSION.to_owned(),
+    }
+}
+
+// ===== main =====
+
+fn main() {
+    // Parse command-line parameters.
+    let matches = App::new("Holo routing daemon")
+        .version(build_version().as_str())
+        .arg(
+            Arg::with_name("config")
+                .short("c")
+                .long("config")
+                .value_name("file")
+                .help("Specify an alternative configuration file."),
+        )
+        .get_matches();
+
+    // Read configuration file.
+    let config_file = matches.value_of("config");
+    let config = Config::load(config_file);
+
+    // Check for root privileges.
+    if !Uid::effective().is_root() {
+        eprintln!("need privileged user");
+        std::process::exit(1);
+    }
+
+    // Ensure only one holod instance runs.
+    let _lock = ensure_single_instance();
+
+    // Initialize tracing.
+    init_tracing(&config.logging);
+
+    // Initialize non-volatile storage.
+    let db = init_db(&config.database_path)
+        .expect("failed to initialize non-volatile storage");
+
+    // Drop privileges.
+    if let Err(error) = privdrop(&config.user) {
+        eprintln!("failed to drop root privileges: {error}");
+        std::process::exit(1);
+    }
+
+    // We're ready to go!
+    info!("starting up");
+
+    // Main loop.
+    let main = || async {
+        // Spawn signal listener.
+        let signal_rx = signal_listener();
+
+        // Serve northbound clients.
+        let nb = Northbound::init(&config, db).await;
+        nb.run(signal_rx).await;
+    };
+    #[cfg(not(feature = "io_uring"))]
+    {
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("failed to create async runtime")
+            .block_on(async {
+                main().await;
+            });
+    }
+    #[cfg(feature = "io_uring")]
+    {
+        tokio_uring::start(async {
+            main().await;
+        });
+    }
+
+    info!("exiting");
+}

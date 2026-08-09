@@ -1,0 +1,118 @@
+name: CI
+
+on: [push, pull_request]
+
+env:
+  CARGO_TERM_COLOR: always
+  # Make sure CI fails on all warnings, including Clippy lints
+  RUSTFLAGS: "-Dwarnings"
+
+jobs:
+  fmt:
+    name: Code Formatting Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: nightly-2026-04-01
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: "rustfmt --check"
+        run: |
+          if ! rustfmt --check $(git ls-files '*.rs'); then
+            printf "Please run \`rustfmt \$(git ls-files '*.rs')\` locally to fix formatting errors.\nSee CONTRIBUTING.md for more details.\n" >&2
+            exit 1
+          fi
+
+  clippy_check:
+    name: Lint Check (Clippy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@1.91
+        with:
+          components: clippy
+      - name: Install Protocol Buffers Compiler
+        run: sudo apt-get install -y protobuf-compiler
+      - name: Set PROTOC Environment Variable
+        run: export PROTOC=/path/to/protoc
+      - name: Run Clippy
+        run: cargo clippy
+      - name: Run Clippy
+        run: cargo clippy -p holo-tools -p holo-replay
+
+  tests_and_coverage_report:
+    name: Tests and Coverage Report
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@1.91
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Generate code coverage
+        run: cargo llvm-cov --all-features --codecov --output-path codecov.json -p holo-bfd -p holo-bgp -p holo-isis -p holo-ldp -p holo-ospf -p holo-rip -p holo-utils -p holo-vrrp
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
+        if: github.ref == 'refs/heads/master' && github.repository_owner == 'holo-routing'
+        with:
+          files: ./lcov.info
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  tests_arm:
+    name: Tests (Arm64)
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@1.91
+      - name: Run tests
+        run: cargo test --all-features -p holo-bfd -p holo-bgp -p holo-isis -p holo-ldp -p holo-ospf -p holo-rip -p holo-utils -p holo-vrrp 
+
+  fuzz-build-check:
+    name: Fuzz Targets Build Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      # cargo-fuzz requires nightly Rust due to LLVM sanitizer support
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: nightly-2026-01-01
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+      - name: Check fuzz targets
+        run: cargo fuzz check
+
+  bench-build-check:
+    name: Benchmark Build Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@1.91
+      - name: Check benchmark builds
+        run: cargo bench --no-run -p holo-bgp -p holo-ldp -p holo-ospf
+
+  docker-build-holod:
+    name: "Docker Build: holod"
+    uses: ./.github/workflows/docker-build-and-attest.yml
+    if: github.ref == 'refs/heads/master' && github.repository_owner == 'holo-routing'
+    with:
+      image-name: holod
+      dockerfile: docker/Dockerfile.holod
+    permissions:
+      id-token: write
+      attestations: write
+      packages: write
+
+  docker-build-holo-bundle:
+    name: "Docker Build: holo-bundle"
+    needs: docker-build-holod
+    uses: ./.github/workflows/docker-build-and-attest.yml
+    if: github.ref == 'refs/heads/master' && github.repository_owner == 'holo-routing'
+    with:
+      image-name: holo-bundle
+      dockerfile: docker/Dockerfile.holo-bundle
+    permissions:
+      id-token: write
+      attestations: write
+      packages: write
