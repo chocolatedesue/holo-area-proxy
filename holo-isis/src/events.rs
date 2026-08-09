@@ -415,10 +415,15 @@ fn process_pdu_hello_p2p(
     }
 
     // If the Three-Way Adjacency TLV is present, validate the neighbor fields.
+    // Area Proxy outside edges source IIH with the Proxy SID, so Outside echoes
+    // that SID in the three-way neighbor field — accept it as local identity.
     if let Some(three_way_adj) = &hello.tlvs.three_way_adj
         && let Some((nbr_system_id, nbr_circuit_id)) = three_way_adj.neighbor
-        && (nbr_system_id != instance.config.system_id.unwrap()
-            || nbr_circuit_id != iface.system.ifindex.unwrap())
+        && (!area_proxy::is_local_hello_identity(
+            instance.config,
+            iface,
+            nbr_system_id,
+        ) || nbr_circuit_id != iface.system.ifindex.unwrap())
     {
         return Err(AdjacencyRejectError::NeighborMismatch.into());
     }

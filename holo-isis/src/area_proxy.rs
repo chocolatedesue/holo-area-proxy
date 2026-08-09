@@ -58,11 +58,16 @@ pub(crate) fn hello_source(
     cfg: &InstanceCfg,
     iface: &Interface,
 ) -> Option<SystemId> {
+    hello_source_for(cfg, is_outside_facing(iface))
+}
+
+/// Same as [`hello_source`], taking an explicit outside-facing flag.
+pub(crate) fn hello_source_for(
+    cfg: &InstanceCfg,
+    outside_facing: bool,
+) -> Option<SystemId> {
     let local = cfg.system_id?;
-    if !cfg.area_proxy.enabled {
-        return Some(local);
-    }
-    if !is_outside_facing(iface) {
+    if !cfg.area_proxy.enabled || !outside_facing {
         return Some(local);
     }
     if cfg.area_proxy.uses_proxy_sid_on_outside() {
@@ -70,6 +75,40 @@ pub(crate) fn hello_source(
     } else {
         Some(local)
     }
+}
+
+/// Returns true when `system_id` is a local identity for three-way adjacency
+/// validation on this interface.
+///
+/// RFC 5303 three-way hellos echo the neighbor's IIH source system-id. On
+/// outside-facing Area Proxy edges that source IIH with the Proxy SID, Outside
+/// will therefore echo the Proxy SID — not the edge's real system-id. Accept
+/// either identity so P2P three-way can complete (RFC 9666 §5.1).
+pub(crate) fn is_local_hello_identity(
+    cfg: &InstanceCfg,
+    iface: &Interface,
+    system_id: SystemId,
+) -> bool {
+    is_local_hello_identity_for(cfg, is_outside_facing(iface), system_id)
+}
+
+/// Same as [`is_local_hello_identity`], taking an explicit outside-facing flag.
+pub(crate) fn is_local_hello_identity_for(
+    cfg: &InstanceCfg,
+    outside_facing: bool,
+    system_id: SystemId,
+) -> bool {
+    if let Some(local) = cfg.system_id
+        && system_id == local
+    {
+        return true;
+    }
+    if let Some(source) = hello_source_for(cfg, outside_facing)
+        && system_id == source
+    {
+        return true;
+    }
+    false
 }
 
 /// SNP (CSNP/PSNP) source system-id for an interface.
@@ -354,5 +393,52 @@ pub(crate) fn purge_proxy_lsp(
             .tx
             .protocol_input
             .lsp_purge(level, id, LspPurgeReason::Removed);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::northbound::configuration::{AreaProxyRole, InstanceCfg};
+
+    fn sid(bytes: [u8; 6]) -> SystemId {
+        SystemId::from(bytes)
+    }
+
+    fn edge_cfg(real: SystemId, proxy: SystemId) -> InstanceCfg {
+        let mut cfg = InstanceCfg::default();
+        cfg.system_id = Some(real);
+        cfg.area_proxy.enabled = true;
+        cfg.area_proxy.role = AreaProxyRole::Edge;
+        cfg.area_proxy.proxy_system_id = Some(proxy);
+        cfg
+    }
+
+    #[test]
+    fn hello_source_uses_proxy_sid_on_outside_edge() {
+        let real = sid([0, 0, 0, 0, 0, 2]);
+        let proxy = sid([0, 0, 0, 0, 0, 0xa0]);
+        let cfg = edge_cfg(real, proxy);
+
+        assert_eq!(hello_source_for(&cfg, true), Some(proxy));
+        assert_eq!(hello_source_for(&cfg, false), Some(real));
+    }
+
+    #[test]
+    fn local_hello_identity_accepts_proxy_sid_on_outside() {
+        let real = sid([0, 0, 0, 0, 0, 2]);
+        let proxy = sid([0, 0, 0, 0, 0, 0xa0]);
+        let other = sid([0, 0, 0, 0, 0, 0x11]);
+        let cfg = edge_cfg(real, proxy);
+
+        // Outside-facing: real SID and Proxy SID are both local.
+        assert!(is_local_hello_identity_for(&cfg, true, real));
+        assert!(is_local_hello_identity_for(&cfg, true, proxy));
+        assert!(!is_local_hello_identity_for(&cfg, true, other));
+
+        // Inside-facing: only the real SID is local (IIH still uses real SID).
+        assert!(is_local_hello_identity_for(&cfg, false, real));
+        assert!(!is_local_hello_identity_for(&cfg, false, proxy));
+        assert!(!is_local_hello_identity_for(&cfg, false, other));
     }
 }
