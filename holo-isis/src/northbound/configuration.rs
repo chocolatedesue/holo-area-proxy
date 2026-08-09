@@ -836,7 +836,7 @@ fn apply_interface(instance: &mut Instance, ifname: &str, change: InterfaceChang
                     }
                 }
                 InterfaceEntryChange::Facing(facing) => {
-                    iface.config.facing = facing.unwrap_or_default();
+                    iface.config.facing = facing;
                     event_queue.insert(Event::InterfaceRestartNetwork(iface_idx));
                 }
                 InterfaceEntryChange::HelloPaddingEnabled(hello_padding) => {

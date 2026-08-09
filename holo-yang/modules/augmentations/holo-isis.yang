@@ -396,7 +396,9 @@ module holo-isis {
     }
 
     leaf facing {
-      when "../../holo-isis:area-proxy/enabled = 'true'";
+      // No when-guard: libyang when evaluation against sibling container
+      // in the same transaction is brittle; facing is ignored unless
+      // area-proxy is enabled at runtime.
       type enumeration {
         enum inside {
           description "Link toward the inside area.";
