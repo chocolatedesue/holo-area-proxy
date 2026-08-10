@@ -180,17 +180,22 @@ def write_yaml_manifest(nodes, links, image: str) -> str:
             f"      image: {image}",
             f'      command: "bash /opt/yqh157/scripts/start-node.sh {name}"',
             "      mounts:",
-            "        - source: ./scripts",
+            # Absolute lab paths: expctl resolves relative sources against the
+            # manifest directory (…/manifest/), not the lab root.
+            f"        - source: {WD}/scripts",
             "          target: /opt/yqh157/scripts",
             "          readOnly: true",
-            "        - source: ./configs",
+            f"        - source: {WD}/configs",
             "          target: /opt/yqh157/configs",
             "          readOnly: true",
-            "        - source: ./generated/underlay",
+            f"        - source: {WD}/generated/underlay",
             "          target: /opt/yqh157/underlay",
             "          readOnly: true",
-            f"        - source: ./generated/var/{name}",
+            f"        - source: {WD}/generated/var/{name}",
             "          target: /var/opt/holo",
+            "          readOnly: false",
+            f"        - source: {WD}/generated/varlog/{name}",
+            "          target: /var/log",
             "          readOnly: false",
         ]
     lines.append("  links:")
@@ -233,6 +238,7 @@ def main():
             (cfg_dir / f"{n}.json").write_text(json.dumps(j, indent=2) + "\n")
             write_underlay_sh(r, c, p2p, und_dir / f"{n}.sh")
             (WD / "generated" / "var" / n).mkdir(parents=True, exist_ok=True)
+            (WD / "generated" / "varlog" / n).mkdir(parents=True, exist_ok=True)
             meta["nodes"][n] = {
                 "row": r, "col": c, "band": band_of(r),
                 "area": BAND_AREA[band_of(r)],
