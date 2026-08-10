@@ -1,0 +1,43 @@
+"""Shared lab path resolution for YQH-157 profiling tools.
+
+Environment (CLI flags on entry scripts override these):
+  YQH157_LAB / YQH157_WD  Lab root (configs, generated, state, evidence)
+  EXPCTL                  Path to expctl binary
+  EXPCTL_STATE_ROOT       expctl state root (default: $YQH157_LAB/state)
+"""
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+_DEFAULT_LAB = Path("/home/cnic/work/yqh157-real-profiling")
+_DEFAULT_EXPCTL = Path("/home/cnic/work/smu/build/linux/arm64/release/expctl")
+
+
+def lab_root(override: str | Path | None = None) -> Path:
+    if override:
+        return Path(override).expanduser().resolve()
+    env = os.environ.get("YQH157_LAB") or os.environ.get("YQH157_WD")
+    return Path(env).expanduser().resolve() if env else _DEFAULT_LAB
+
+
+def expctl_bin(override: str | Path | None = None) -> Path:
+    if override:
+        return Path(override).expanduser().resolve()
+    env = os.environ.get("EXPCTL")
+    return Path(env).expanduser().resolve() if env else _DEFAULT_EXPCTL
+
+
+def state_root(lab: Path | None = None, override: str | Path | None = None) -> Path:
+    if override:
+        return Path(override).expanduser().resolve()
+    env = os.environ.get("EXPCTL_STATE_ROOT")
+    if env:
+        return Path(env).expanduser().resolve()
+    return (lab or lab_root()) / "state"
+
+
+def evidence_root(lab: Path | None = None, override: str | Path | None = None) -> Path:
+    if override:
+        return Path(override).expanduser().resolve()
+    return (lab or lab_root()) / "evidence"

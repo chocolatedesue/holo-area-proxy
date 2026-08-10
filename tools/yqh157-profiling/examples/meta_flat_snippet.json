@@ -1,0 +1,82 @@
+{
+  "stack": "flat",
+  "timestamps": {
+    "sampler_start": 1786352392.0849097,
+    "sampler_start_iso": "2026-08-10T08:59:52Z",
+    "apply_start": 1786352392.0849223,
+    "apply_start_iso": "2026-08-10T08:59:52Z",
+    "apply_end": 1786352392.517358,
+    "apply_wall_s": 0.4324357509613037,
+    "commit_start": 1786352393.7675998,
+    "commit_end": 1786352395.1173835,
+    "converge_poll_start": 1786352395.1174715,
+    "converge_ts": 1786352411.8710496,
+    "converge_ts_iso": "2026-08-10T09:00:11Z",
+    "sampler_end": 1786352509.5297668,
+    "sampler_end_iso": "2026-08-10T09:01:49Z",
+    "start": 1786352392.0849223,
+    "end": 1786352509.5297668
+  },
+  "converge": {
+    "converged": true,
+    "poll_wall_s": 16.753578186035156,
+    "apply_to_converge_s": 19.78612732887268,
+    "lsdb_sample": [
+      {
+        "node": "r1c1",
+        "lsp_count": 48,
+        "unique_nbrs": 4
+      },
+      {
+        "node": "r1c3",
+        "lsp_count": 48,
+        "unique_nbrs": 4
+      },
+      {
+        "node": "r3c3",
+        "lsp_count": 48,
+        "unique_nbrs": 4
+      },
+      {
+        "node": "r5c3",
+        "lsp_count": 48,
+        "unique_nbrs": 4
+      },
+      {
+        "node": "r6c6",
+        "lsp_count": 48,
+        "unique_nbrs": 4
+      },
+      {
+        "node": "r2c2",
+        "lsp_count": 48,
+        "unique_nbrs": 4
+      },
+      {
+        "node": "r4c4",
+        "lsp_count": 48,
+        "unique_nbrs": 4
+      },
+      {
+        "node": "r1c6",
+        "lsp_count": 48,
+        "unique_nbrs": 4
+      }
+    ],
+    "ping_loss": {
+      "I1": 0,
+      "I2": 0,
+      "I3": 0
+    }
+  },
+  "sample_rounds": 40,
+  "sample_count": 1404,
+  "duration_s": 117.44484448432922,
+  "unique_ts_count": 39,
+  "integrity_multi_ts": true,
+  "rss_kb_min": 24544,
+  "rss_kb_max": 30300,
+  "rss_kb_mean": 26722.207977207978,
+  "pcpu_max_observed": 2.4,
+  "pcpu_mean_all": 0.425
+}
