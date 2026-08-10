@@ -221,7 +221,8 @@ def main():
     t_all = time.time()
     log("=== stack_a_flat start ===")
     # ensure image
-    sh("sudo podman image exists docker.io/library/holo-bundle:yqh135-ee60831 || sudo podman pull docker.io/library/holo-bundle:yqh135-ee60831")
+    img = os.environ.get("HOLO_IMAGE", "docker.io/library/holo-bundle:yqh135-ee60831")
+    sh(f"sudo podman image exists {img} || sudo podman pull {img}")
     # delete only flat exp if leftover
     r = sh(f"sudo env EXPCTL_STATE_ROOT={STATE} {EXPCTL} get -o json")
     (OUT_LOG / "stack_a_flat_expctl_pre.json").write_text(r.stdout)

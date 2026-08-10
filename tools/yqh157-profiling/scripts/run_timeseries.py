@@ -24,10 +24,12 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from yqh157_paths import evidence_root, expctl_bin, lab_root, state_root  # noqa: E402
+from yqh157_paths import evidence_root, expctl_bin, holo_image, lab_root, state_root  # noqa: E402
 
 INTERVAL_S = 3.0
 STEADY_AFTER_S = 90.0  # post-converge sampling window
+INTERVAL_MIN_S = 2.0
+INTERVAL_MAX_S = 5.0
 
 # Filled by configure()
 WD: Path
@@ -37,14 +39,26 @@ PROTO_DIR: Path
 EV: Path
 OUT_LOG: Path
 STACKS: dict
+HOLO_IMAGE: str
 
 
-def configure(lab=None, expctl=None, state=None):
+def configure(lab=None, expctl=None, state=None, interval=None, image=None):
     """Resolve lab paths from CLI/env. Call once from main before run_stack."""
-    global WD, STATE, EXPCTL, PROTO_DIR, EV, OUT_LOG, STACKS
+    global WD, STATE, EXPCTL, PROTO_DIR, EV, OUT_LOG, STACKS, INTERVAL_S, HOLO_IMAGE
     WD = lab_root(lab)
     STATE = state_root(WD, state)
     EXPCTL = expctl_bin(expctl)
+    HOLO_IMAGE = holo_image(image)
+    if interval is not None:
+        try:
+            iv = float(interval)
+        except (TypeError, ValueError) as e:
+            raise SystemExit(f"invalid --interval: {interval!r}") from e
+        if iv < INTERVAL_MIN_S or iv > INTERVAL_MAX_S:
+            raise SystemExit(
+                f"--interval must be in [{INTERVAL_MIN_S}, {INTERVAL_MAX_S}] seconds, got {iv}"
+            )
+        INTERVAL_S = iv
     PROTO_DIR = WD / "generated" / "proto"
     EV = evidence_root(WD)
     OUT_LOG = EV / "run_logs"
@@ -402,8 +416,8 @@ def run_stack(key: str):
 
     log(f"=== timeseries {key} start ===", log_path)
     sh(
-        "sudo podman image exists docker.io/library/holo-bundle:yqh135-ee60831 || "
-        "sudo podman pull docker.io/library/holo-bundle:yqh135-ee60831"
+        f"sudo podman image exists {HOLO_IMAGE} || "
+        f"sudo podman pull {HOLO_IMAGE}"
     )
 
     r = sh(f"sudo env EXPCTL_STATE_ROOT={STATE} {EXPCTL} get -o json")
@@ -603,8 +617,25 @@ def main():
     ap.add_argument("--lab", default=None, help="Lab root ($YQH157_LAB)")
     ap.add_argument("--expctl", default=None, help="expctl binary ($EXPCTL)")
     ap.add_argument("--state-root", default=None, help="EXPCTL_STATE_ROOT (default: <lab>/state)")
+    ap.add_argument(
+        "--interval",
+        type=float,
+        default=None,
+        help=f"Sample interval seconds in [{INTERVAL_MIN_S}, {INTERVAL_MAX_S}] (default: {INTERVAL_S})",
+    )
+    ap.add_argument(
+        "--image",
+        default=None,
+        help="HOLO_IMAGE override (default: $HOLO_IMAGE or docker.io/library/holo-bundle:yqh135-ee60831)",
+    )
     args = ap.parse_args()
-    configure(lab=args.lab, expctl=args.expctl, state=args.state_root)
+    configure(
+        lab=args.lab,
+        expctl=args.expctl,
+        state=args.state_root,
+        interval=args.interval,
+        image=args.image,
+    )
     keys = ["flat", "proxy"] if args.stack == "both" else [args.stack]
     rc = 0
     for k in keys:

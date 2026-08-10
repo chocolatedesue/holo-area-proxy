@@ -6,7 +6,7 @@ import ipaddress, json, os, re
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from yqh157_paths import lab_root  # noqa: E402
+from yqh157_paths import holo_image, lab_root  # noqa: E402
 import argparse as _argparse
 
 def _cli_lab():
@@ -24,7 +24,7 @@ EXP_NAME = "yqh157-flat-torus66"
 PREFIX = "yqh157f"
 CFG_DIR = WD / "configs_flat"
 GEN = WD / "generated_flat"
-IMAGE = "docker.io/library/holo-bundle:yqh135-ee60831"
+IMAGE = holo_image()
 
 
 def band_of(r: int) -> int:

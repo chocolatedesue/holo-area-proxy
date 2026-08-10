@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from yqh157_paths import lab_root  # noqa: E402
+from yqh157_paths import holo_image, lab_root  # noqa: E402
 import argparse as _argparse
 
 def _cli_lab():
@@ -247,7 +247,7 @@ def main():
     meta["leaders"] = [node_name(r, c) for r, c in sorted(LEADERS)]
     for ln, li, rn, ri in links:
         meta["links"].append({"endpoints": [f"{ln}:{li}", f"{rn}:{ri}"]})
-    image = "holo-bundle:yqh135-ee60831"
+    image = holo_image()
     (WD / "manifest").mkdir(parents=True, exist_ok=True)
     (WD / "manifest" / "yqh157-torus66.yaml").write_text(
         write_yaml_manifest(meta["nodes"], links, image)
