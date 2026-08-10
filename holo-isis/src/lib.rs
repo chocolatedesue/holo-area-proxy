@@ -28,5 +28,7 @@ pub mod northbound;
 pub mod packet;
 pub mod route;
 pub mod spf;
+#[cfg(feature = "profiling")]
+pub mod spf_fixture;
 pub mod sr;
 pub mod tasks;

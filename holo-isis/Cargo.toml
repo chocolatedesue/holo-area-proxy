@@ -63,3 +63,15 @@ workspace = true
 default = []
 testing = []
 deterministic = []
+# Measurement-only surface for real compute_spt benches (YQH-157/162).
+# Keep empty so default builds are unchanged; enable with --features profiling,testing.
+profiling = []
+
+[[bench]]
+name = "spf_spt"
+harness = false
+required-features = ["profiling", "testing"]
+
+[[example]]
+name = "spf_profile_export"
+required-features = ["profiling", "testing"]

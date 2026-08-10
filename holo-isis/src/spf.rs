@@ -1373,3 +1373,39 @@ fn log_spf_run(
     // Remove old entries if necessary.
     instance.state.spf_log.truncate(SPF_LOG_MAX_SIZE);
 }
+
+// ===== profiling exports (feature = "profiling") =====
+
+#[cfg(feature = "profiling")]
+/// Thin public wrapper around [`compute_spt`] for measurement-only callers.
+///
+/// Does not change the algorithm. Enabled only with `--features profiling`.
+pub fn compute_spt_for_profiling(
+    level: LevelNumber,
+    root_system_id: SystemId,
+    local: bool,
+    mt_id: Option<crate::packet::iana::MtId>,
+    metric_mode: MetricMode,
+    instance: &InstanceUpView<'_>,
+    interfaces: &Interfaces,
+    adjacencies: &Arena<Adjacency>,
+    lsp_entries: &Arena<LspEntry>,
+) -> Spt {
+    compute_spt(
+        level,
+        root_system_id,
+        local,
+        mt_id,
+        metric_mode,
+        instance,
+        interfaces,
+        adjacencies,
+        lsp_entries,
+    )
+}
+
+#[cfg(feature = "profiling")]
+/// Vertex count in an SPT (measurement helper).
+pub fn spt_vertex_count(spt: &Spt) -> usize {
+    spt.iter().count()
+}
