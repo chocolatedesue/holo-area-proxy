@@ -119,25 +119,28 @@ export YQH157_LAB=/home/cnic/work/yqh184-profiling-repro
 export EXPCTL=/home/cnic/work/smu/build/linux/arm64/release/expctl
 export EXPCTL_STATE_ROOT="$YQH157_LAB/state"
 export HOLO_IMAGE=docker.io/library/holo-bundle:yqh135-ee60831
-mkdir -p "$YQH157_LAB"/{configs,configs_flat,generated,generated_flat,manifest,state,evidence}
+mkdir -p "$YQH157_LAB"/{configs,configs_flat,generated,generated_flat,manifest,state,evidence,scripts,generated/proto}
 
-# Sync scripts from yqh2 product tree (adjust if NFS/shared mount already visible)
-PROD_SCRIPTS=/home/cnic/work/area-proxy-holo-yqh157-profiling/tools/yqh157-profiling/scripts
-if [ -d "$PROD_SCRIPTS" ]; then
-  SCRIPTS="$PROD_SCRIPTS"
-else
-  mkdir -p "$YQH157_LAB/scripts"
-  # from yqh2: rsync -a tools/yqh157-profiling/scripts/ yqh1:$YQH157_LAB/scripts/
-  SCRIPTS="$YQH157_LAB/scripts"
-fi
+# Product tree is on yqh2 — rsync scripts (yqh1 usually has no product worktree):
+#   from yqh2: rsync -a tools/yqh157-profiling/scripts/ yqh1:$YQH157_LAB/scripts/
+#   from yqh2: rsync -a proto/ yqh1:$YQH157_LAB/generated/proto/
+SCRIPTS="$YQH157_LAB/scripts"
 cd "$SCRIPTS"
+test -f "$YQH157_LAB/generated/proto/holo.proto"   # required for YANG commit (grpcurl -import-path)
 ```
+
+**Gotchas (Stage B verified):**
+
+1. **Proto:** without `$YQH157_LAB/generated/proto/holo.proto`, every commit fails (`holo.proto does not reside in any import path`).
+2. **Mount paths:** manifests must use **absolute** lab paths for binds. Relative `./scripts` resolves under `manifest/` and breaks apply.
+3. **`/var/log`:** holod needs a **writable** `/var/log` bind (`generated/varlog/<node>`). Missing it → RO rootfs panic, grpc 0/36. `generate_flat` already does this; `generate_all` must too (fixed in tools ≥ `2015518`).
 
 Completion:
 
 - [ ] `test -d "$YQH157_LAB" && test -d "$EXPCTL_STATE_ROOT"`
 - [ ] `YQH157_LAB` is **not** `yqh157-real-profiling`
 - [ ] `test -f "$SCRIPTS/run_timeseries.py"`
+- [ ] `test -f "$YQH157_LAB/generated/proto/holo.proto"`
 
 ### 2. Generate configs (flat OFF / proxy ON)
 
