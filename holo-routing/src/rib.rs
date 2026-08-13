@@ -36,6 +36,9 @@ pub struct Rib {
     pub mpls_update_queue: BTreeSet<Label>,
     pub update_queue_tx: UnboundedSender<()>,
     pub subscriptions: HashMap<usize, RedistributeSub>,
+    /// When false, skip all netlink IP/MPLS route install and uninstall while
+    /// still updating the in-process RIB, ACTIVE flags, redistribute, and NHT.
+    pub fib_install: bool,
 }
 
 #[derive(Clone, Debug, new)]
@@ -76,7 +79,10 @@ pub struct RedistributeSub {
 // ===== impl Rib =====
 
 impl Rib {
-    pub(crate) fn new(update_queue_tx: UnboundedSender<()>) -> Self {
+    pub(crate) fn new(
+        update_queue_tx: UnboundedSender<()>,
+        fib_install: bool,
+    ) -> Self {
         Self {
             ip: Default::default(),
             mpls: Default::default(),
@@ -85,6 +91,7 @@ impl Rib {
             mpls_update_queue: Default::default(),
             update_queue_tx,
             subscriptions: Default::default(),
+            fib_install,
         }
     }
 
@@ -315,6 +322,9 @@ impl Rib {
         interfaces: &Interfaces,
         netlink_tx: &UnboundedSender<NetlinkRequest>,
     ) {
+        // Copy so gates do not conflict with borrows of RIB entries.
+        let fib_install = self.fib_install;
+
         // Process IP update queue.
         while let Some(prefix) = self.ip_update_queue.pop_first() {
             let rib_prefix = self.ip.entry(prefix).or_default();
@@ -336,9 +346,17 @@ impl Rib {
                     route.flags.insert(RouteFlags::ACTIVE);
 
                     // Install the route using the netlink handle.
-                    if route.protocol != Protocol::DIRECT {
+                    if fib_install && route.protocol != Protocol::DIRECT {
                         netlink::ip_route_install(
                             netlink_tx, &prefix, route, interfaces,
+                        );
+                    } else if !fib_install
+                        && route.protocol != Protocol::DIRECT
+                    {
+                        debug!(
+                            %prefix,
+                            protocol = ?route.protocol,
+                            "fib-install skipped"
                         );
                     }
 
@@ -356,9 +374,15 @@ impl Rib {
             if rib_prefix.is_empty() {
                 if let Some(protocol) = old_best_protocol {
                     // Uninstall the old best route using the netlink handle.
-                    if protocol != Protocol::DIRECT {
+                    if fib_install && protocol != Protocol::DIRECT {
                         netlink::ip_route_uninstall(
                             netlink_tx, &prefix, protocol,
+                        );
+                    } else if !fib_install && protocol != Protocol::DIRECT {
+                        debug!(
+                            %prefix,
+                            ?protocol,
+                            "fib-install skipped"
                         );
                     }
 
@@ -382,11 +406,19 @@ impl Rib {
             // Check if the route was marked for removal.
             if route.flags.contains(RouteFlags::REMOVED) {
                 // Uninstall the MPLS route using the netlink handle.
-                netlink::mpls_route_uninstall(
-                    netlink_tx,
-                    label,
-                    route.protocol,
-                );
+                if fib_install {
+                    netlink::mpls_route_uninstall(
+                        netlink_tx,
+                        label,
+                        route.protocol,
+                    );
+                } else {
+                    debug!(
+                        ?label,
+                        protocol = ?route.protocol,
+                        "fib-install skipped"
+                    );
+                }
 
                 // Effectively remove the MPLS route.
                 self.mpls.remove(&label);
@@ -394,7 +426,17 @@ impl Rib {
             }
 
             // Install the route using the netlink handle.
-            netlink::mpls_route_install(netlink_tx, label, route, interfaces);
+            if fib_install {
+                netlink::mpls_route_install(
+                    netlink_tx, label, route, interfaces,
+                );
+            } else {
+                debug!(
+                    ?label,
+                    protocol = ?route.protocol,
+                    "fib-install skipped"
+                );
+            }
         }
 
         // Reevaluate all registered nexthops.
@@ -505,6 +547,10 @@ impl Rib {
         &mut self,
         netlink_tx: &UnboundedSender<NetlinkRequest>,
     ) {
+        if !self.fib_install {
+            debug!("fib-install skipped");
+            return;
+        }
         for (prefix, rib_prefix) in &self.ip {
             if let Some(route) = rib_prefix
                 .iter()
@@ -520,6 +566,128 @@ impl Rib {
         for (label, route) in &self.mpls {
             netlink::mpls_route_uninstall(netlink_tx, *label, route.protocol);
         }
+    }
+}
+
+// ===== tests =====
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use holo_utils::southbound::{RouteKind, RouteOpaqueAttrs};
+    use tokio::sync::mpsc;
+
+    fn dummy_owner() -> IbusClientId {
+        IbusClientId::default()
+    }
+
+    fn isis_route_msg(prefix: IpNetwork) -> RouteMsg {
+        RouteMsg {
+            protocol: Protocol::ISIS,
+            kind: RouteKind::Unicast,
+            prefix,
+            distance: 115,
+            metric: 10,
+            tag: None,
+            opaque_attrs: RouteOpaqueAttrs::None,
+            nexthops: vec![],
+        }
+    }
+
+    #[test]
+    fn fib_install_false_skips_ip_netlink_add_and_del() {
+        let (qtx, _qrx) = mpsc::unbounded_channel();
+        let (netlink_tx, mut netlink_rx) = mpsc::unbounded_channel();
+        let interfaces = Interfaces::default();
+        let mut rib = Rib::new(qtx, false);
+
+        let prefix: IpNetwork = "10.0.0.0/24".parse().unwrap();
+        rib.ip_route_add(isis_route_msg(prefix), dummy_owner());
+        rib.process_rib_update_queue(&interfaces, &netlink_tx);
+
+        // In-process RIB still selects ACTIVE.
+        let routes = rib.ip.get(&prefix).expect("prefix in RIB");
+        assert_eq!(routes.len(), 1);
+        assert!(routes[0].flags.contains(RouteFlags::ACTIVE));
+        // No netlink request enqueued.
+        assert!(netlink_rx.try_recv().is_err());
+
+        // Delete path is also gated.
+        rib.ip_route_del(RouteKeyMsg {
+            protocol: Protocol::ISIS,
+            prefix,
+        });
+        rib.process_rib_update_queue(&interfaces, &netlink_tx);
+        assert!(rib.ip.get(&prefix).is_none());
+        assert!(netlink_rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn fib_install_true_enqueues_ip_netlink_add() {
+        let (qtx, _qrx) = mpsc::unbounded_channel();
+        let (netlink_tx, mut netlink_rx) = mpsc::unbounded_channel();
+        let interfaces = Interfaces::default();
+        let mut rib = Rib::new(qtx, true);
+
+        let prefix: IpNetwork = "10.1.0.0/24".parse().unwrap();
+        rib.ip_route_add(isis_route_msg(prefix), dummy_owner());
+        rib.process_rib_update_queue(&interfaces, &netlink_tx);
+
+        match netlink_rx.try_recv() {
+            Ok(NetlinkRequest::RouteAdd(_)) => {}
+            Ok(NetlinkRequest::RouteDel(_)) => {
+                panic!("expected RouteAdd, got RouteDel")
+            }
+            Err(e) => panic!("expected RouteAdd, got err {e}"),
+        }
+    }
+
+    #[test]
+    fn fib_install_false_skips_mpls_netlink() {
+        let (qtx, _qrx) = mpsc::unbounded_channel();
+        let (netlink_tx, mut netlink_rx) = mpsc::unbounded_channel();
+        let interfaces = Interfaces::default();
+        let mut rib = Rib::new(qtx, false);
+
+        let label = Label::new(100_000);
+        rib.mpls_route_add(
+            LabelInstallMsg {
+                protocol: Protocol::ISIS,
+                label,
+                nexthops: vec![],
+                route: None,
+                replace: true,
+            },
+            dummy_owner(),
+        );
+        rib.process_rib_update_queue(&interfaces, &netlink_tx);
+
+        assert!(rib.mpls.contains_key(&label));
+        assert!(netlink_rx.try_recv().is_err());
+
+        rib.mpls_route_del(LabelUninstallMsg {
+            protocol: Protocol::ISIS,
+            label,
+            nexthops: vec![],
+            route: None,
+        });
+        rib.process_rib_update_queue(&interfaces, &netlink_tx);
+        assert!(!rib.mpls.contains_key(&label));
+        assert!(netlink_rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn route_uninstall_all_noop_when_fib_install_false() {
+        let (qtx, _qrx) = mpsc::unbounded_channel();
+        let (netlink_tx, mut netlink_rx) = mpsc::unbounded_channel();
+        let interfaces = Interfaces::default();
+        let mut rib = Rib::new(qtx, false);
+
+        let prefix: IpNetwork = "192.0.2.0/24".parse().unwrap();
+        rib.ip_route_add(isis_route_msg(prefix), dummy_owner());
+        rib.process_rib_update_queue(&interfaces, &netlink_tx);
+        rib.route_uninstall_all(&netlink_tx);
+        assert!(netlink_rx.try_recv().is_err());
     }
 }
 

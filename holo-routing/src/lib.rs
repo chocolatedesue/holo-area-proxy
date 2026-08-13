@@ -207,6 +207,7 @@ pub fn start(
     ibus_tx: &IbusChannelsTx,
     ibus_conn_rx: IbusConnReceiver,
     shared: InstanceShared,
+    fib_install: bool,
 ) -> NbDaemonSender {
     let (nb_daemon_tx, nb_daemon_rx) = mpsc::channel(4);
     let (ibus_notif_tx, ibus_notif_rx) = mpsc::unbounded_channel();
@@ -223,7 +224,7 @@ pub fn start(
             netlink_tx: netlink_txp,
             shared: shared.clone(),
             interfaces: Default::default(),
-            rib: Rib::new(rib_update_queue_tx),
+            rib: Rib::new(rib_update_queue_tx, fib_install),
             static_routes: Default::default(),
             sr_config: Default::default(),
             bier_config: Default::default(),
@@ -251,8 +252,15 @@ pub fn start(
         let netlink_handle = netlink::init();
 
         // Purge stale routes potentially left behind by a previous Holo
-        // instance.
-        netlink::purge_stale_routes(&netlink_handle).await;
+        // instance. Skip when fib-install is disabled: we must not assume the
+        // kernel holds Holo routes and must not delete third-party entries.
+        if fib_install {
+            netlink::purge_stale_routes(&netlink_handle).await;
+        } else {
+            warn!(
+                "fib-install disabled: skipping netlink stale route purge and FIB install/uninstall"
+            );
+        }
 
         // Start netlink Tx task.
         let netlink_tx_task = tokio::task::spawn(async move {
@@ -295,7 +303,7 @@ pub fn start(
                 birt_update_queue_rx,
             );
 
-            // Uninstall all routes before exiting.
+            // Uninstall all routes before exiting (no-op when fib-install off).
             master.rib.route_uninstall_all(&master.netlink_tx);
             drop(master.netlink_tx);
             let _ = tokio::runtime::Handle::current().block_on(netlink_tx_task);

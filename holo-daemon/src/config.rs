@@ -18,6 +18,18 @@ pub struct Config {
     pub logging: Logging,
     pub event_recorder: event_recorder::Config,
     pub plugins: Plugins,
+    pub routing: Routing,
+}
+
+/// Global routing / FIB behaviour controlled from holod.toml.
+#[derive(Debug, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Routing {
+    /// When true (default), install and uninstall IP/MPLS routes in the kernel
+    /// FIB via netlink. When false, the in-process RIB, redistribute, and NHT
+    /// paths still run, but all netlink RouteAdd/RouteDel and startup stale
+    /// purge are skipped (control-plane only / profiling mode).
+    pub fib_install: bool,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -142,7 +154,16 @@ impl Default for Config {
             logging: Default::default(),
             event_recorder: Default::default(),
             plugins: Default::default(),
+            routing: Default::default(),
         }
+    }
+}
+
+// ===== impl Routing =====
+
+impl Default for Routing {
+    fn default() -> Routing {
+        Routing { fib_install: true }
     }
 }
 
