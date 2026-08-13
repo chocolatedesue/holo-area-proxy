@@ -1,0 +1,14 @@
+{
+  "install-enabled": true,
+  "ip-installs": "1",
+  "ip-installs-skipped": "0",
+  "ip-uninstalls": "0",
+  "ip-uninstalls-skipped": "0",
+  "mpls-installs": "0",
+  "mpls-installs-skipped": "0",
+  "mpls-uninstalls": "0",
+  "mpls-uninstalls-skipped": "0",
+  "rib-ipv4-active": "6",
+  "rib-ipv6-active": "2",
+  "rib-mpls-entries": "0"
+}

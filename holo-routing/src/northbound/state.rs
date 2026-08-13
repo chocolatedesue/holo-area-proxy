@@ -317,6 +317,29 @@ impl<'a> YangList<'a, Master> for routing::ribs::rib::routes::route::next_hop::n
     }
 }
 
+impl<'a> YangContainer<'a, Master> for routing::fib::Fib {
+    type ParentListEntry = ();
+
+    fn new(master: &'a Master, _: &Self::ParentListEntry) -> Option<Self> {
+        let snap = master.rib.fib_stats.snapshot();
+        let (v4, v6, mpls) = master.rib.rib_size_snapshot();
+        Some(Self {
+            install_enabled: Some(master.rib.fib_install),
+            ip_installs: Some(snap.ip_installs),
+            ip_installs_skipped: Some(snap.ip_installs_skipped),
+            ip_uninstalls: Some(snap.ip_uninstalls),
+            ip_uninstalls_skipped: Some(snap.ip_uninstalls_skipped),
+            mpls_installs: Some(snap.mpls_installs),
+            mpls_installs_skipped: Some(snap.mpls_installs_skipped),
+            mpls_uninstalls: Some(snap.mpls_uninstalls),
+            mpls_uninstalls_skipped: Some(snap.mpls_uninstalls_skipped),
+            rib_ipv4_active: Some(v4),
+            rib_ipv6_active: Some(v6),
+            rib_mpls_entries: Some(mpls),
+        })
+    }
+}
+
 impl<'a> YangList<'a, Master> for routing::birts::birt::Birt {
     type ParentListEntry = ();
     type ListEntry = u8;
