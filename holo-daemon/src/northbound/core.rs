@@ -734,8 +734,13 @@ fn start_providers(
     // Start holo-routing.
     #[cfg(feature = "routing")]
     {
-        let daemon_tx =
-            holo_routing::start(provider_tx, &ibus_tx, ibus_rx.routing, shared);
+        let daemon_tx = holo_routing::start(
+            provider_tx,
+            &ibus_tx,
+            ibus_rx.routing,
+            shared,
+            config.routing.fib_install,
+        );
         register_provider::<holo_routing::Master>(
             providers.len(),
             &mut registered_paths,

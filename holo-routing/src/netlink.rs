@@ -78,7 +78,10 @@ pub(crate) fn ip_route_install(
         IpNetwork::V6(_) => AddressFamily::Inet6,
     };
     let nexthops = netlink_nexthops(af, route.nexthops.iter(), interfaces);
-    let msg = RouteMessageBuilder::<IpAddr>::new()
+    // Special routes (blackhole/unreachable/prohibit) often have no nexthops.
+    // Pushing an empty RTA_MULTIPATH causes the kernel to return ERANGE
+    // ("Numerical result out of range"). Only attach multipath when non-empty.
+    let mut builder = RouteMessageBuilder::<IpAddr>::new()
         .destination_prefix(prefix.ip(), prefix.prefix())
         .unwrap()
         .protocol(protocol)
@@ -87,9 +90,11 @@ pub(crate) fn ip_route_install(
             RouteKind::Blackhole => RouteType::BlackHole,
             RouteKind::Unreachable => RouteType::Unreachable,
             RouteKind::Prohibit => RouteType::Prohibit,
-        })
-        .multipath(nexthops)
-        .build();
+        });
+    if !nexthops.is_empty() {
+        builder = builder.multipath(nexthops);
+    }
+    let msg = builder.build();
 
     // Enqueue netlink request.
     netlink_tx.send(NetlinkRequest::RouteAdd(msg)).unwrap();
@@ -132,11 +137,13 @@ pub(crate) fn mpls_route_install(
         route.nexthops.iter(),
         interfaces,
     );
-    let msg = RouteMessageBuilder::<MplsLabel>::new()
+    let mut builder = RouteMessageBuilder::<MplsLabel>::new()
         .label(label)
-        .protocol(protocol)
-        .multipath(nexthops)
-        .build();
+        .protocol(protocol);
+    if !nexthops.is_empty() {
+        builder = builder.multipath(nexthops);
+    }
+    let msg = builder.build();
 
     // Enqueue netlink request.
     netlink_tx.send(NetlinkRequest::RouteAdd(msg)).unwrap();

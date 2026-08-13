@@ -54,6 +54,15 @@ database_path = "/var/opt/holo/holo.db"
   # Directory where to save the files (needs to be writable by @user or @group)
   dir = "/var/opt/holo"
 
+# Global routing / kernel FIB behaviour (holo-routing).
+[routing]
+  # Install and uninstall IP/MPLS routes in the kernel FIB via netlink.
+  # Default true preserves production behaviour.
+  # Set to false for control-plane-only / profiling runs: in-process RIB,
+  # ACTIVE selection, redistribute and NHT still run; netlink RouteAdd/Del
+  # and startup stale-route purge are skipped. Logs contain "fib-install skipped".
+  fib_install = true
+
 # Daemon plugins
 [plugins]
   # gRPC northbound plugin configuration

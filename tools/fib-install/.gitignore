@@ -1,0 +1,4 @@
+out/
+scripts/_gen/
+scripts/__pycache__/
+**/*.pyc

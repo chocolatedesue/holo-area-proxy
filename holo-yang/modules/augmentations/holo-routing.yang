@@ -8,6 +8,11 @@ module holo-routing {
     reference "RFC 6991: Common YANG Data Types";
   }
 
+  import ietf-yang-types {
+    prefix "yang";
+    reference "RFC 6991: Common YANG Data Types";
+  }
+
   import ietf-routing {
     prefix "rt";
   }
@@ -24,6 +29,67 @@ module holo-routing {
     module.";
 
   augment "/rt:routing" {
+    container fib {
+      config false;
+      description
+        "Kernel FIB install gate and high-performance counters.
+         Queried via northbound GetState (gRPC/gNMI). Counters use
+         atomic increments on the RIB update path.";
+
+      leaf install-enabled {
+        type boolean;
+        description
+          "True when holod.toml [routing].fib_install is enabled and
+           netlink RouteAdd/RouteDel are performed. False means
+           control-plane-only mode (in-process RIB still updates).";
+      }
+
+      leaf ip-installs {
+        type yang:counter64;
+        description "IP routes enqueued for netlink RouteAdd.";
+      }
+      leaf ip-installs-skipped {
+        type yang:counter64;
+        description "IP installs skipped because fib-install is false.";
+      }
+      leaf ip-uninstalls {
+        type yang:counter64;
+        description "IP routes enqueued for netlink RouteDel.";
+      }
+      leaf ip-uninstalls-skipped {
+        type yang:counter64;
+        description "IP uninstalls skipped because fib-install is false.";
+      }
+      leaf mpls-installs {
+        type yang:counter64;
+        description "MPLS routes enqueued for netlink RouteAdd.";
+      }
+      leaf mpls-installs-skipped {
+        type yang:counter64;
+        description "MPLS installs skipped because fib-install is false.";
+      }
+      leaf mpls-uninstalls {
+        type yang:counter64;
+        description "MPLS routes enqueued for netlink RouteDel.";
+      }
+      leaf mpls-uninstalls-skipped {
+        type yang:counter64;
+        description "MPLS uninstalls skipped because fib-install is false.";
+      }
+      leaf rib-ipv4-active {
+        type yang:counter64;
+        description "Active IPv4 prefixes currently in the in-process RIB.";
+      }
+      leaf rib-ipv6-active {
+        type yang:counter64;
+        description "Active IPv6 prefixes currently in the in-process RIB.";
+      }
+      leaf rib-mpls-entries {
+        type yang:counter64;
+        description "MPLS label entries currently in the in-process RIB.";
+      }
+    }
+
     container birts {
       description "BIER routing tables";
       list birt {

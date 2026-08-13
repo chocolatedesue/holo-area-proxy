@@ -1,0 +1,95 @@
+=== mode fib_install=false addr=127.0.0.1:15051 prefix=198.51.100.0/24 ===
+ready
+{
+  "install-enabled": false,
+  "ip-installs": "0",
+  "ip-installs-skipped": "0",
+  "ip-uninstalls": "0",
+  "ip-uninstalls-skipped": "0",
+  "mpls-installs": "0",
+  "mpls-installs-skipped": "0",
+  "mpls-uninstalls": "0",
+  "mpls-uninstalls-skipped": "0",
+  "rib-ipv4-active": "5",
+  "rib-ipv6-active": "2",
+  "rib-mpls-entries": "0"
+}
+commit ok transaction_id=1
+{
+  "install-enabled": false,
+  "ip-installs": "0",
+  "ip-installs-skipped": "1",
+  "ip-uninstalls": "0",
+  "ip-uninstalls-skipped": "0",
+  "mpls-installs": "0",
+  "mpls-installs-skipped": "0",
+  "mpls-uninstalls": "0",
+  "mpls-uninstalls-skipped": "0",
+  "rib-ipv4-active": "6",
+  "rib-ipv6-active": "2",
+  "rib-mpls-entries": "0"
+}
+ASSERT mode=false enabled=False ip_installs=0 skipped=1 rib_v4_active=6
+ip route match lines:
+(none)
+OK
+=== mode fib_install=true addr=127.0.0.1:15052 prefix=203.0.113.0/24 ===
+ready
+{
+  "install-enabled": true,
+  "ip-installs": "0",
+  "ip-installs-skipped": "0",
+  "ip-uninstalls": "0",
+  "ip-uninstalls-skipped": "0",
+  "mpls-installs": "0",
+  "mpls-installs-skipped": "0",
+  "mpls-uninstalls": "0",
+  "mpls-uninstalls-skipped": "0",
+  "rib-ipv4-active": "5",
+  "rib-ipv6-active": "2",
+  "rib-mpls-entries": "0"
+}
+commit ok transaction_id=1
+{
+  "install-enabled": true,
+  "ip-installs": "1",
+  "ip-installs-skipped": "0",
+  "ip-uninstalls": "0",
+  "ip-uninstalls-skipped": "0",
+  "mpls-installs": "0",
+  "mpls-installs-skipped": "0",
+  "mpls-uninstalls": "0",
+  "mpls-uninstalls-skipped": "0",
+  "rib-ipv4-active": "6",
+  "rib-ipv6-active": "2",
+  "rib-mpls-entries": "0"
+}
+ASSERT mode=true enabled=True ip_installs=1 skipped=0 rib_v4_active=6
+ip route match lines:
+blackhole 203.0.113.0/24 proto static
+OK
+=== ALL SMOKE PASSED ===
+total 68
+drwxr-xr-x 2 cnic cnic 4096 Aug 13 11:16 .
+drwxr-xr-x 6 cnic cnic 4096 Aug 13 11:10 ..
+-rw-r--r-- 1 cnic cnic  334 Aug 13 11:16 fib-after-false.json
+-rw-r--r-- 1 cnic cnic  333 Aug 13 11:16 fib-after-true.json
+-rw-r--r-- 1 cnic cnic  334 Aug 13 11:16 fib-before-false.json
+-rw-r--r-- 1 cnic cnic  333 Aug 13 11:16 fib-before-true.json
+-rw-r--r-- 1 cnic cnic    7 Aug 13 11:16 holod-pid-false.txt
+-rw-r--r-- 1 cnic cnic    7 Aug 13 11:16 holod-pid-true.txt
+-rw-r--r-- 1 cnic cnic 1226 Aug 13 11:16 holod-stdout-false.txt
+-rw-r--r-- 1 cnic cnic  943 Aug 13 11:16 holod-stdout-true.txt
+-rw-r--r-- 1 cnic cnic 2639 Aug 13 11:16 ip-route-after-false.txt
+-rw-r--r-- 1 cnic cnic 2717 Aug 13 11:16 ip-route-after-true.txt
+-rw-r--r-- 1 cnic cnic    0 Aug 13 11:16 ip-route-before-false.txt
+-rw-r--r-- 1 cnic cnic    0 Aug 13 11:16 ip-route-before-true.txt
+-rw-r--r-- 1 cnic cnic    0 Aug 13 11:16 ip-route-match-false.txt
+-rw-r--r-- 1 cnic cnic   39 Aug 13 11:16 ip-route-match-true.txt
+-rw-r--r-- 1 cnic cnic  438 Aug 13 11:16 log-fib-false.txt
+-rw-r--r-- 1 cnic cnic    0 Aug 13 11:16 log-fib-true.txt
+-rw-r--r-- 1 cnic cnic    0 Aug 13 11:16 log-netlink-err-false.txt
+-rw-r--r-- 1 cnic cnic    0 Aug 13 11:16 log-netlink-err-true.txt
+-rw-r--r-- 1 cnic cnic 3384 Aug 13 11:16 rib-after-false.json
+-rw-r--r-- 1 cnic cnic 3383 Aug 13 11:16 rib-after-true.json
+-rw-r--r-- 1 cnic cnic 1810 Aug 13 11:16 smoke_run.log

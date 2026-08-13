@@ -1,0 +1,46 @@
+# Smoke-test holod.toml: normal kernel FIB install (default behaviour).
+user = "cnic"
+group = "cnic"
+database_path = "/tmp/yqh502-holo-fib-true/holo.db"
+
+[logging]
+  [logging.journald]
+    enabled = false
+  [logging.file]
+    enabled = true
+    dir = "/tmp/yqh502-holo-fib-true"
+    name = "holod.log"
+    rotation = "never"
+    style = "full"
+    colors = false
+    show_thread_id = false
+    show_source = false
+  [logging.stdout]
+    enabled = true
+    style = "compact"
+    colors = false
+    show_thread_id = false
+    show_source = false
+
+[event_recorder]
+  enabled = false
+  dir = "/tmp/yqh502-holo-fib-true"
+
+[routing]
+  fib_install = true
+
+[plugins]
+  [plugins.grpc]
+    enabled = true
+    address = "127.0.0.1:15052"
+    [plugins.grpc.tls]
+      enabled = false
+      certificate = "/etc/ssl/private/holo.pem"
+      key = "/etc/ssl/certs/holo.key"
+  [plugins.gnmi]
+    enabled = false
+    address = "127.0.0.1:10162"
+    [plugins.gnmi.tls]
+      enabled = false
+      certificate = "/etc/ssl/private/holo.pem"
+      key = "/etc/ssl/certs/holo.key"

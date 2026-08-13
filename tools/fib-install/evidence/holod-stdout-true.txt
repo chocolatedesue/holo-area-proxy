@@ -1,0 +1,32 @@
+2026-08-13T11:16:41.295904Z  INFO starting up
+2026-08-13T11:16:41.365487Z  WARN failed to set MPLS platform labels error=no such sysctl: net.mpls.platform_labels
+2026-08-13T11:16:42.675183Z DEBUG northbound: configuration transaction confirmed_timeout=0 changes={
+  "ietf-routing:routing": {
+    "@": {
+      "yang:operation": "create"
+    },
+    "control-plane-protocols": {
+      "control-plane-protocol": [
+        {
+          "type": "static",
+          "name": "default",
+          "static-routes": {
+            "ietf-ipv4-unicast-routing:ipv4": {
+              "route": [
+                {
+                  "destination-prefix": "203.0.113.0/24",
+                  "next-hop": {
+                    "special-next-hop": "blackhole"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+
+2026-08-13T11:16:44.562358Z  INFO received SIGTERM
+2026-08-13T11:16:44.565128Z  INFO exiting
