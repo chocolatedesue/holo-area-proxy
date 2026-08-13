@@ -120,6 +120,7 @@ pub struct InstanceCfg {
     pub ipv6_router_id: Option<Ipv6Addr>,
     pub max_paths: u16,
     pub afs: BTreeMap<AddressFamily, AddressFamilyCfg>,
+    pub spf_enabled: bool,
     pub spf_initial_delay: u32,
     pub spf_short_delay: u32,
     pub spf_long_delay: u32,
@@ -529,6 +530,26 @@ fn apply_instance(instance: &mut Instance, change: ConfigChange, event_queue: &m
         ConfigChange::SpfControlPaths(max_paths) => {
             instance.config.max_paths = max_paths;
             event_queue.insert(Event::RerunSpf);
+        }
+        ConfigChange::SpfControlEnabled(enabled) => {
+            let was_enabled = instance.config.spf_enabled;
+            instance.config.spf_enabled = enabled;
+            if was_enabled && !enabled {
+                // Cancel pending SPF Delay FSM work; leave RIB stale.
+                if let Some(state) = instance.state.as_mut() {
+                    for level in [LevelNumber::L1, LevelNumber::L2] {
+                        let spf_sched = state.spf_sched.get_mut(level);
+                        spf_sched.delay_timer = None;
+                        spf_sched.learn_timer = None;
+                        spf_sched.hold_down_timer = None;
+                        spf_sched.trigger_lsps.clear();
+                        spf_sched.schedule_time = None;
+                        spf_sched.delay_state = spf::fsm::State::Quiet;
+                    }
+                }
+            } else if !was_enabled && enabled {
+                event_queue.insert(Event::RerunSpf);
+            }
         }
         ConfigChange::SpfControlIetfSpfDelayInitialDelay(initial_delay) => {
             instance.config.spf_initial_delay = initial_delay;
@@ -1518,6 +1539,16 @@ impl Provider for Instance {
 // ===== configuration helpers =====
 
 impl InstanceCfg {
+    /// Apply process-start SPF defaults from `InstanceShared` (file/env merge).
+    pub(crate) fn apply_spf_startup(&mut self, spf: &holo_protocol::IsisSpfConfig) {
+        self.spf_enabled = spf.enabled;
+        self.spf_initial_delay = spf.initial_delay;
+        self.spf_short_delay = spf.short_delay;
+        self.spf_long_delay = spf.long_delay;
+        self.spf_hold_down = spf.hold_down;
+        self.spf_time_to_learn = spf.time_to_learn;
+    }
+
     // Checks if the specified address family is enabled.
     pub(crate) fn is_af_enabled(&self, af: AddressFamily) -> bool {
         if let Some(af_cfg) = self.afs.get(&af) {
@@ -1647,6 +1678,14 @@ impl<T> LevelsCfgWithDefault<T>
 where
     T: Copy,
 {
+    pub(crate) fn with_all(all: T) -> Self {
+        Self {
+            all,
+            l1: None,
+            l2: None,
+        }
+    }
+
     // Retrieves the configuration value for the specified level.
     pub(crate) fn get(&self, level: impl Into<LevelType>) -> T {
         let level = level.into();
@@ -1787,6 +1826,7 @@ impl Default for InstanceCfg {
             l2: None,
         };
         let max_paths = isis::spf_control::paths::DFLT;
+        let spf_enabled = isis::spf_control::enabled::DFLT;
         let spf_initial_delay = isis::spf_control::ietf_spf_delay::initial_delay::DFLT;
         let spf_short_delay = isis::spf_control::ietf_spf_delay::short_delay::DFLT;
         let spf_long_delay = isis::spf_control::ietf_spf_delay::long_delay::DFLT;
@@ -1814,6 +1854,7 @@ impl Default for InstanceCfg {
             ipv4_router_id: None,
             ipv6_router_id: None,
             afs: Default::default(),
+            spf_enabled,
             spf_initial_delay,
             spf_short_delay,
             spf_long_delay,

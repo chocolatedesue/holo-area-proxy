@@ -19,6 +19,7 @@ pub struct Config {
     pub event_recorder: event_recorder::Config,
     pub plugins: Plugins,
     pub routing: Routing,
+    pub isis: Isis,
 }
 
 /// Global routing / FIB behaviour controlled from holod.toml.
@@ -155,6 +156,7 @@ impl Default for Config {
             event_recorder: Default::default(),
             plugins: Default::default(),
             routing: Default::default(),
+            isis: Default::default(),
         }
     }
 }
@@ -166,6 +168,41 @@ impl Default for Routing {
         Routing { fib_install: true }
     }
 }
+
+/// IS-IS process-start defaults from `holod.toml`.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Isis {
+    pub spf: IsisSpf,
+}
+
+/// Optional `[isis.spf]` fields. `None` means the key was not set in the file.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct IsisSpf {
+    pub enabled: Option<bool>,
+    pub initial_delay: Option<u32>,
+    pub short_delay: Option<u32>,
+    pub long_delay: Option<u32>,
+    pub hold_down: Option<u32>,
+    pub time_to_learn: Option<u32>,
+}
+
+impl IsisSpf {
+    /// Convert TOML optional fields into the merge source used by holo-isis.
+    #[cfg(feature = "isis")]
+    pub(crate) fn to_sources(&self) -> holo_isis::spf_config::SpfConfigSources {
+        holo_isis::spf_config::SpfConfigSources {
+            enabled: self.enabled,
+            initial_delay: self.initial_delay,
+            short_delay: self.short_delay,
+            long_delay: self.long_delay,
+            hold_down: self.hold_down,
+            time_to_learn: self.time_to_learn,
+        }
+    }
+}
+
 
 // ===== impl LoggingJournald =====
 

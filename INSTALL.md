@@ -56,3 +56,34 @@ configuration that can only be changed through a northbound client
 (e.g. [gRPC](https://github.com/holo-routing/holo/wiki/gRPC),
 [gNMI](https://github.com/holo-routing/holo/wiki/gNMI),
 [CLI](https://github.com/holo-routing/holo/wiki/CLI), etc).
+
+### IS-IS SPF process-start defaults
+
+The optional `[isis.spf]` section in `holod.toml` sets **process-start** defaults
+for the automatic SPF master switch and RFC 8405 delay parameters. These values
+are applied when an IS-IS instance is created; they are **not** hot-reloaded.
+
+```toml
+[isis.spf]
+enabled = true
+initial_delay = 50
+short_delay = 200
+long_delay = 5000
+hold_down = 10000
+time_to_learn = 500
+```
+
+Equivalent environment variables (used when a TOML key is omitted):
+
+* `HOLO_ISIS_SPF_ENABLED` (`true`/`false`, `1`/`0`, `yes`/`no`, `on`/`off`)
+* `HOLO_ISIS_SPF_INITIAL_DELAY` / `SHORT_DELAY` / `LONG_DELAY` / `HOLD_DOWN` / `TIME_TO_LEARN` (milliseconds, unsigned)
+
+**Priority per field:** explicit TOML value > environment variable > YANG/code default.
+Northbound commits override the running instance. Invalid env values are logged
+and ignored (fallback to the next priority).
+
+**Note:** northbound `get-config` only shows committed YANG. File/env startup
+defaults may not appear there until committed through a northbound client.
+
+When `enabled = false`, automatic SPF stops; LSDB/flooding/adjacency continue and
+the RIB remains stale until SPF is re-enabled (which triggers a full SPF).

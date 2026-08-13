@@ -325,6 +325,13 @@ pub(crate) fn fsm(
     instance: &mut InstanceUpView<'_>,
     arenas: &mut InstanceArenas,
 ) -> Result<(), Error> {
+    // Global SPF enable/disable gate (D10): do not touch MANET compute_spt.
+    // When disabled, automatic SPF is stopped; LSDB/flooding/adjacency continue
+    // and the RIB remains stale. last_event_rcvd and timers are not updated (D2).
+    if !instance.config.spf_enabled {
+        return Ok(());
+    }
+
     // Begin a debug span for logging within the SPF context.
     let span = debug_span!("spf", %level);
     let _span_guard = span.enter();
@@ -740,6 +747,37 @@ pub(crate) fn compute_spt(
 
     spt
 }
+
+/// Measurement-only thin wrapper around [`compute_spt`].
+///
+/// Gated by `feature = "profiling"`. Keeps the production `pub(crate)` symbol
+/// unchanged. Callers must supply a realistic LSDB (`Lsp` TLV graph); this does
+/// **not** run an isomorphic stand-in Dijkstra.
+#[cfg(feature = "profiling")]
+pub fn compute_spt_for_profiling(
+    level: LevelNumber,
+    root_system_id: SystemId,
+    local: bool,
+    mt_id: Option<crate::packet::iana::MtId>,
+    metric_mode: MetricMode,
+    instance: &crate::instance::InstanceUpView<'_>,
+    interfaces: &crate::collections::Interfaces,
+    adjacencies: &crate::collections::Arena<crate::adjacency::Adjacency>,
+    lsp_entries: &crate::collections::Arena<crate::lsdb::LspEntry>,
+) -> Spt {
+    compute_spt(
+        level,
+        root_system_id,
+        local,
+        mt_id,
+        metric_mode,
+        instance,
+        interfaces,
+        adjacencies,
+        lsp_entries,
+    )
+}
+
 
 // ===== helper functions =====
 

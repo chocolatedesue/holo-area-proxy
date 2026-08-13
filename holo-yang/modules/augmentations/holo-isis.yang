@@ -669,6 +669,21 @@ module holo-isis {
   }
 
   augment "/rt:routing/rt:control-plane-protocols/"
+        + "rt:control-plane-protocol/isis:isis/isis:spf-control" {
+    leaf enabled {
+      type boolean;
+      default "true";
+      description
+        "Enables automatic SPF recalculation for this IS-IS instance.
+         When set to false, topology and configuration events no longer
+         schedule or run the SPF Delay FSM; the link-state database,
+         flooding, and adjacency formation continue, and the RIB is left
+         unchanged (stale) until SPF is re-enabled. There is no separate
+         manual SPF RPC.";
+    }
+  }
+
+  augment "/rt:routing/rt:control-plane-protocols/"
         + "rt:control-plane-protocol/isis:isis/isis:spf-control/"
         + "isis:ietf-spf-delay" {
     list level {

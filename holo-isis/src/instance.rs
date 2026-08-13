@@ -336,10 +336,15 @@ impl ProtocolInstance for Instance {
     ) -> Instance {
         Debug::InstanceCreate.log();
 
+        let mut config = InstanceCfg::default();
+        if let Some(spf) = &shared.isis_spf {
+            config.apply_spf_startup(spf);
+        }
+
         Instance {
             name,
             system: Default::default(),
-            config: Default::default(),
+            config,
             state: None,
             arenas: Default::default(),
             tx,
@@ -432,7 +437,7 @@ impl ProtocolInstance for Instance {
 // ===== impl InstanceState =====
 
 impl InstanceState {
-    fn new(boot_count: u64) -> InstanceState {
+    pub(crate) fn new(boot_count: u64) -> InstanceState {
         InstanceState {
             boot_count,
             circuit_id_allocator: Default::default(),

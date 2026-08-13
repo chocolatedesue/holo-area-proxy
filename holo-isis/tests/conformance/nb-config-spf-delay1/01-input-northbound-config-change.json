@@ -1,0 +1,51 @@
+{
+  "ietf-routing:routing": {
+    "@": {
+      "yang:operation": "none"
+    },
+    "control-plane-protocols": {
+      "control-plane-protocol": [
+        {
+          "type": "ietf-isis:isis",
+          "name": "test",
+          "ietf-isis:isis": {
+            "spf-control": {
+              "ietf-spf-delay": {
+                "initial-delay": 100,
+                "@initial-delay": {
+                  "yang:operation": "replace",
+                  "yang:orig-default": true,
+                  "yang:orig-value": "50"
+                },
+                "short-delay": 300,
+                "@short-delay": {
+                  "yang:operation": "replace",
+                  "yang:orig-default": true,
+                  "yang:orig-value": "200"
+                },
+                "long-delay": 6000,
+                "@long-delay": {
+                  "yang:operation": "replace",
+                  "yang:orig-default": true,
+                  "yang:orig-value": "5000"
+                },
+                "hold-down": 12000,
+                "@hold-down": {
+                  "yang:operation": "replace",
+                  "yang:orig-default": true,
+                  "yang:orig-value": "10000"
+                },
+                "time-to-learn": 700,
+                "@time-to-learn": {
+                  "yang:operation": "replace",
+                  "yang:orig-default": true,
+                  "yang:orig-value": "500"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -508,6 +508,36 @@ impl Adjacencies {
 // ===== impl Lsdb =====
 
 impl Lsdb {
+    /// Install an LSP without starting expiry timers (profiling / offline LSDB only).
+    #[cfg(feature = "profiling")]
+    pub(crate) fn insert_for_profiling<'a>(
+        &mut self,
+        arena: &'a mut Arena<LspEntry>,
+        lsp: Lsp,
+    ) -> (LspEntryIndex, &'a mut LspEntry) {
+        use crate::lsdb::LspEntryFlags;
+        self.next_id += 1;
+        let lse = LspEntry {
+            id: self.next_id,
+            data: lsp,
+            expiry_timer: None,
+            delete_timer: None,
+            refresh_timer: None,
+            flags: LspEntryFlags::default(),
+        };
+        let lse_idx = arena.0.insert(lse);
+        let lse = &mut arena[lse_idx];
+        self.id_tree.insert(lse.id, lse_idx);
+        self.lspid_tree.insert(lse.data.lsp_id, lse_idx);
+        let lsp = &lse.data;
+        if !lsp.is_expired() {
+            self.lsp_count += 1;
+            self.fingerprint ^= lsp.lsdb_fingerprint_component();
+            self.fingerprint_last_update = Some(Instant::now());
+        }
+        (lse_idx, lse)
+    }
+
     pub(crate) fn insert<'a>(
         &mut self,
         arena: &'a mut Arena<LspEntry>,

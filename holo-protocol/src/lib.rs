@@ -87,6 +87,21 @@ where
     fn test_dir() -> String;
 }
 
+/// Process-start IS-IS SPF defaults resolved from holod.toml / env / YANG DFLT.
+///
+/// Applied once when an IS-IS instance is created. Northbound commits override
+/// the runtime values afterwards. `get-config` only reflects committed YANG and
+/// may disagree with these startup defaults until they are also committed.
+#[derive(Clone, Debug)]
+pub struct IsisSpfConfig {
+    pub enabled: bool,
+    pub initial_delay: u32,
+    pub short_delay: u32,
+    pub long_delay: u32,
+    pub hold_down: u32,
+    pub time_to_learn: u32,
+}
+
 /// Shared data among all protocol instances.
 #[derive(Clone, Default, new)]
 pub struct InstanceShared {
@@ -108,6 +123,8 @@ pub struct InstanceShared {
     pub bier_config: Arc<BierCfg>,
     // Event recorder configuration.
     pub event_recorder_config: Option<event_recorder::Config>,
+    // IS-IS SPF startup defaults (file/env resolved); applied at Instance::new.
+    pub isis_spf: Option<IsisSpfConfig>,
 }
 
 /// Instance input message.

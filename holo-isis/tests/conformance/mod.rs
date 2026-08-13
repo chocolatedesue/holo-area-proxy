@@ -999,6 +999,26 @@ async fn nb_config_spf_paths1() {
 }
 
 // Input:
+//  * Northbound: disable automatic SPF (spf-control/holo-isis:enabled = false)
+// Output: no SPF / RIB changes (timers cancelled, delay FSM forced to quiet)
+//
+// Input:
+//  * Northbound: change SPF maximum-paths from 16 to 1 (would normally RerunSpf)
+// Output: no ibus route updates (SPF gate blocks automatic recalculation)
+#[tokio::test]
+async fn nb_config_spf_enabled1() {
+    run_test::<Instance>("nb-config-spf-enabled1", "topo2-1", "rt1").await;
+}
+
+// Input:
+//  * Northbound: replace ietf-spf-delay parameters (config echo only)
+// Output: no SPF / RIB side effects (delay values take effect on next schedule)
+#[tokio::test]
+async fn nb_config_spf_delay1() {
+    run_test::<Instance>("nb-config-spf-delay1", "topo2-1", "rt1").await;
+}
+
+// Input:
 //  * Northbound: enable segment routing
 // Output:
 //  * Protocol: send an updated local LSP to all adjacencies
