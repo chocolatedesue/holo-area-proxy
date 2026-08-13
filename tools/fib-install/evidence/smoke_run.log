@@ -1,7 +1,4 @@
-
-[1m[[0m[34;49mnotice[0m[1;39;49m][0m[39;49m A new release of pip is available: [0m[31;49m26.0.1[0m[39;49m -> [0m[32;49m26.2.1[0m
-[1m[[0m[34;49mnotice[0m[1;39;49m][0m[39;49m To update, run: [0m[32;49mpip3.12 install --upgrade pip[0m
-=== mode fib_install=false addr=127.0.0.1:15051 ===
+=== mode fib_install=false addr=127.0.0.1:15051 prefix=198.51.100.0/24 ===
 ready
 {
   "install-enabled": false,
@@ -36,7 +33,7 @@ ASSERT mode=false enabled=False ip_installs=0 skipped=1 rib_v4_active=6
 ip route match lines:
 (none)
 OK
-=== mode fib_install=true addr=127.0.0.1:15052 ===
+=== mode fib_install=true addr=127.0.0.1:15052 prefix=203.0.113.0/24 ===
 ready
 {
   "install-enabled": true,
@@ -69,29 +66,30 @@ commit ok transaction_id=1
 }
 ASSERT mode=true enabled=True ip_installs=1 skipped=0 rib_v4_active=6
 ip route match lines:
-(none)
-WARN: no ip route match for prefix (may need CAP / table layout); counters still checked
+blackhole 203.0.113.0/24 proto static
 OK
 === ALL SMOKE PASSED ===
-total 64
-drwxr-xr-x 2 cnic cnic 4096 Aug 13 08:35 .
-drwxr-xr-x 5 cnic cnic 4096 Aug 13 08:32 ..
--rw-r--r-- 1 cnic cnic  334 Aug 13 08:34 fib-after-false.json
--rw-r--r-- 1 cnic cnic  333 Aug 13 08:35 fib-after-true.json
--rw-r--r-- 1 cnic cnic  334 Aug 13 08:34 fib-before-false.json
--rw-r--r-- 1 cnic cnic  333 Aug 13 08:35 fib-before-true.json
--rw-r--r-- 1 cnic cnic    7 Aug 13 08:34 holod-pid-false.txt
--rw-r--r-- 1 cnic cnic    7 Aug 13 08:34 holod-pid-true.txt
--rw-r--r-- 1 cnic cnic 1226 Aug 13 08:34 holod-stdout-false.txt
--rw-r--r-- 1 cnic cnic 1042 Aug 13 08:35 holod-stdout-true.txt
--rw-r--r-- 1 cnic cnic  407 Aug 13 08:34 ip-route-after-false.txt
--rw-r--r-- 1 cnic cnic  361 Aug 13 08:35 ip-route-after-true.txt
--rw-r--r-- 1 cnic cnic    0 Aug 13 08:34 ip-route-before-false.txt
--rw-r--r-- 1 cnic cnic    0 Aug 13 08:34 ip-route-before-true.txt
--rw-r--r-- 1 cnic cnic    0 Aug 13 08:34 ip-route-match-false.txt
--rw-r--r-- 1 cnic cnic    0 Aug 13 08:35 ip-route-match-true.txt
--rw-r--r-- 1 cnic cnic  438 Aug 13 08:34 log-fib-false.txt
--rw-r--r-- 1 cnic cnic    0 Aug 13 08:35 log-fib-true.txt
--rw-r--r-- 1 cnic cnic 3384 Aug 13 08:34 rib-after-false.json
--rw-r--r-- 1 cnic cnic 3383 Aug 13 08:35 rib-after-true.json
--rw-r--r-- 1 cnic cnic 2080 Aug 13 08:35 smoke_run.log
+total 68
+drwxr-xr-x 2 cnic cnic 4096 Aug 13 11:16 .
+drwxr-xr-x 6 cnic cnic 4096 Aug 13 11:10 ..
+-rw-r--r-- 1 cnic cnic  334 Aug 13 11:16 fib-after-false.json
+-rw-r--r-- 1 cnic cnic  333 Aug 13 11:16 fib-after-true.json
+-rw-r--r-- 1 cnic cnic  334 Aug 13 11:16 fib-before-false.json
+-rw-r--r-- 1 cnic cnic  333 Aug 13 11:16 fib-before-true.json
+-rw-r--r-- 1 cnic cnic    7 Aug 13 11:16 holod-pid-false.txt
+-rw-r--r-- 1 cnic cnic    7 Aug 13 11:16 holod-pid-true.txt
+-rw-r--r-- 1 cnic cnic 1226 Aug 13 11:16 holod-stdout-false.txt
+-rw-r--r-- 1 cnic cnic  943 Aug 13 11:16 holod-stdout-true.txt
+-rw-r--r-- 1 cnic cnic 2639 Aug 13 11:16 ip-route-after-false.txt
+-rw-r--r-- 1 cnic cnic 2717 Aug 13 11:16 ip-route-after-true.txt
+-rw-r--r-- 1 cnic cnic    0 Aug 13 11:16 ip-route-before-false.txt
+-rw-r--r-- 1 cnic cnic    0 Aug 13 11:16 ip-route-before-true.txt
+-rw-r--r-- 1 cnic cnic    0 Aug 13 11:16 ip-route-match-false.txt
+-rw-r--r-- 1 cnic cnic   39 Aug 13 11:16 ip-route-match-true.txt
+-rw-r--r-- 1 cnic cnic  438 Aug 13 11:16 log-fib-false.txt
+-rw-r--r-- 1 cnic cnic    0 Aug 13 11:16 log-fib-true.txt
+-rw-r--r-- 1 cnic cnic    0 Aug 13 11:16 log-netlink-err-false.txt
+-rw-r--r-- 1 cnic cnic    0 Aug 13 11:16 log-netlink-err-true.txt
+-rw-r--r-- 1 cnic cnic 3384 Aug 13 11:16 rib-after-false.json
+-rw-r--r-- 1 cnic cnic 3383 Aug 13 11:16 rib-after-true.json
+-rw-r--r-- 1 cnic cnic 1810 Aug 13 11:16 smoke_run.log

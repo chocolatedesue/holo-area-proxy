@@ -11,7 +11,7 @@ Leaves (atomic Relaxed counters on RIB hot path):
 | leaf | meaning |
 |------|---------|
 | `install-enabled` | holod.toml `[routing].fib_install` |
-| `ip-installs` / `ip-installs-skipped` | netlink IP add performed / skipped |
+| `ip-installs` / `ip-installs-skipped` | netlink IP RouteAdd **enqueued** / skipped (not kernel ACK) |
 | `ip-uninstalls` / `ip-uninstalls-skipped` | netlink IP del |
 | `mpls-*` | MPLS equivalents |
 | `rib-ipv4-active` / `rib-ipv6-active` / `rib-mpls-entries` | in-process RIB sizes |
@@ -34,3 +34,8 @@ bash tools/fib-install/scripts/smoke_deploy.sh
 Runs `fib_install=false` then `true`: commit blackhole static route, assert GetState counters and kernel has no prefix when disabled.
 
 Evidence from last local run: `tools/fib-install/evidence/`.
+
+## Smoke hard gates
+
+- `fib_install=false`: skip counter ≥1, no kernel prefix, no install error logs.
+- `fib_install=true`: install counter ≥1, **no** `failed to install route`, kernel shows test prefix (e.g. `blackhole … proto static`). Soft WARN is not allowed.

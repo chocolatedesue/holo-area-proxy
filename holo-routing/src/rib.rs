@@ -646,19 +646,24 @@ impl Rib {
             debug!("fib-install skipped");
             return;
         }
+        let fib_stats = Arc::clone(&self.fib_stats);
         for (prefix, rib_prefix) in &self.ip {
             if let Some(route) = rib_prefix
                 .iter()
                 .find(|route| route.flags.contains(RouteFlags::ACTIVE))
             {
-                netlink::ip_route_uninstall(
-                    netlink_tx,
-                    &prefix,
-                    route.protocol,
-                );
+                if route.protocol != Protocol::DIRECT {
+                    FibStats::inc(&fib_stats.ip_uninstalls);
+                    netlink::ip_route_uninstall(
+                        netlink_tx,
+                        &prefix,
+                        route.protocol,
+                    );
+                }
             }
         }
         for (label, route) in &self.mpls {
+            FibStats::inc(&fib_stats.mpls_uninstalls);
             netlink::mpls_route_uninstall(netlink_tx, *label, route.protocol);
         }
     }
