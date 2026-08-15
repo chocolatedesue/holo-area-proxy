@@ -63,6 +63,24 @@ database_path = "/var/opt/holo/holo.db"
   # and startup stale-route purge are skipped. Logs contain "fib-install skipped".
   fib_install = true
 
+
+# Passive control-plane metrics export (JSONL and/or CSV).
+# Default off. When enabled: open switch → run scenario → pull log files only
+# (no GetState polling loop). See docs/observability.md.
+[observability]
+  # Enable or disable
+  enabled = false
+  # Directory for metric files (writable by @user / @group)
+  dir = "/var/log/holo"
+  # Basename without extension → {file_prefix}.jsonl / .csv
+  file_prefix = "holod-metrics"
+  # Sample interval in milliseconds (min 100)
+  interval_ms = 1000
+  # Format: "jsonl", "csv", or "both"
+  format = "both"
+  # Best-effort process RSS from /proc/self/status
+  include_process = true
+
 # Daemon plugins
 [plugins]
   # gRPC northbound plugin configuration

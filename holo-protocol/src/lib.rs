@@ -108,6 +108,8 @@ pub struct InstanceShared {
     pub bier_config: Arc<BierCfg>,
     // Event recorder configuration.
     pub event_recorder_config: Option<event_recorder::Config>,
+    // Passive metrics hub (None when observability disabled).
+    pub observability: Option<std::sync::Arc<holo_utils::observability::Metrics>>,
 }
 
 /// Instance input message.

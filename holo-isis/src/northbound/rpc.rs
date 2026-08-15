@@ -58,8 +58,11 @@ impl YangRpc<Instance> for yang::clear_database::ClearDatabase {
         // Clear database.
         let level_type = self.input.level.unwrap_or(LevelType::All);
         for level in level_type {
-            let lsdb = instance.state.lsdb.get_mut(level);
-            lsdb.clear(&mut arenas.lsp_entries);
+            {
+                let lsdb = instance.state.lsdb.get_mut(level);
+                lsdb.clear(&mut arenas.lsp_entries);
+            }
+            crate::lsdb::observability_publish_lsdb(&instance, level);
         }
 
         Ok(())

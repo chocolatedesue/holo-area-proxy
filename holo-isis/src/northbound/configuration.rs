@@ -385,6 +385,15 @@ fn apply_instance(instance: &mut Instance, change: ConfigChange, event_queue: &m
                 event_queue.insert(Event::InstanceReset);
             }
             instance.config.system_id = system_id;
+            if let Some(obs) = instance.shared.observability.as_ref() {
+                if let Some(sid) = instance.config.system_id.as_ref() {
+                    let bytes: &[u8; 6] = sid.as_ref();
+                    obs.set_system_id(format!(
+                        "{:02X}{:02X}.{:02X}{:02X}.{:02X}{:02X}",
+                        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]
+                    ));
+                }
+            }
             event_queue.insert(Event::InstanceUpdate);
         }
         ConfigChange::AreaAddress(op, area_addr) => {

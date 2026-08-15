@@ -851,9 +851,16 @@ fn compute_spf(
     spf_sched.last_time = Some(end_time);
 
     // Log SPF completion and duration.
+    let run_duration = end_time - start_time;
     if instance.config.trace_opts.spf {
-        let run_duration = end_time - start_time;
         Debug::SpfFinish(run_duration).log();
+    }
+    if let Some(obs) = instance.shared.observability.as_ref() {
+        let lvl = match level {
+            LevelNumber::L1 => 1u8,
+            LevelNumber::L2 => 2u8,
+        };
+        obs.record_spf(lvl, run_duration.as_micros() as u64);
     }
 
     // Add entry to SPF log.

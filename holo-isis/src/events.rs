@@ -1598,17 +1598,20 @@ pub(crate) fn process_lsp_delete(
     lse_key: LspEntryKey,
 ) -> Result<(), Error> {
     // Lookup LSP entry in the LSDB.
-    let lsdb = instance.state.lsdb.get_mut(level);
-    let (lse_idx, lse) = lsdb.get_by_key(&arenas.lsp_entries, &lse_key)?;
-    assert!(lse.flags.contains(LspEntryFlags::PURGED));
+    {
+        let lsdb = instance.state.lsdb.get_mut(level);
+        let (lse_idx, lse) = lsdb.get_by_key(&arenas.lsp_entries, &lse_key)?;
+        assert!(lse.flags.contains(LspEntryFlags::PURGED));
 
-    // Log LSP deletion.
-    if instance.config.trace_opts.lsdb {
-        Debug::LspDelete(level, &lse.data).log();
+        // Log LSP deletion.
+        if instance.config.trace_opts.lsdb {
+            Debug::LspDelete(level, &lse.data).log();
+        }
+
+        // Delete the LSP entry from the LSDB.
+        lsdb.delete(&mut arenas.lsp_entries, lse_idx);
     }
-
-    // Delete the LSP entry from the LSDB.
-    lsdb.delete(&mut arenas.lsp_entries, lse_idx);
+    lsdb::observability_publish_lsdb(instance, level);
 
     Ok(())
 }

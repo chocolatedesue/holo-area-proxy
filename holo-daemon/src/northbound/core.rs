@@ -666,9 +666,12 @@ fn start_providers(
     let mut validation_fns = Vec::new();
     let (provider_tx, provider_rx) = mpsc::unbounded_channel();
     let (ibus_tx, ibus_rx) = ibus::ibus_channels();
+    let observability_metrics =
+        holo_utils::observability::maybe_start(&config.observability);
     let shared = InstanceShared {
         db: Some(db),
         event_recorder_config: Some(config.event_recorder.clone()),
+        observability: observability_metrics,
         ..Default::default()
     };
 

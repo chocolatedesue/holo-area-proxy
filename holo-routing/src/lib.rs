@@ -141,6 +141,17 @@ impl Master {
                         &self.interfaces,
                         &self.netlink_tx,
                     );
+                    if let Some(obs) = self.shared.observability.as_ref() {
+                        let (v4, v6, mpls) = self.rib.rib_size_snapshot();
+                        obs.set_rib_sizes(v4, v6, mpls);
+                        let snap = self.rib.fib_stats.snapshot();
+                        obs.set_fib_counters(
+                            snap.ip_installs,
+                            snap.ip_installs_skipped,
+                            snap.ip_uninstalls,
+                            snap.ip_uninstalls_skipped,
+                        );
+                    }
                 }
                 EventMsg::BirtUpdate => {
                     self.birt.process_birt_update_queue(&self.interfaces);
@@ -231,6 +242,10 @@ pub fn start(
             instances: Default::default(),
             birt: Birt::new(birt_update_queue_tx),
         };
+
+        if let Some(obs) = master.shared.observability.as_ref() {
+            obs.set_fib_install(fib_install);
+        }
 
         // Request information about all interfaces addresses.
         ibus::request_addresses(&master.ibus_tx);

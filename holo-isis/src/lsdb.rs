@@ -1640,6 +1640,8 @@ pub(crate) fn install<'a>(
         update_hostname_db(instance, lsp_entries, level, lsp_id.system_id);
     }
 
+    observability_publish_lsdb(instance, level);
+
     &mut lsp_entries[lse_idx]
 }
 
@@ -1727,4 +1729,18 @@ pub(crate) fn lsp_originate(
         &instance.tx.protocol_input.lsp_refresh,
     );
     lse.refresh_timer = Some(refresh_timer);
+}
+
+
+/// Best-effort publish of LSDB counts into the passive observability hub.
+pub(crate) fn observability_publish_lsdb(instance: &InstanceUpView<'_>, level: LevelNumber) {
+    let Some(obs) = instance.shared.observability.as_ref() else {
+        return;
+    };
+    let lsdb = instance.state.lsdb.get(level);
+    let lvl = match level {
+        LevelNumber::L1 => 1u8,
+        LevelNumber::L2 => 2u8,
+    };
+    obs.set_lsdb(lvl, lsdb.lsp_count() as u64, lsdb.fingerprint());
 }

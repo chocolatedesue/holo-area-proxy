@@ -25,6 +25,7 @@ pub mod keychain;
 pub mod mac_addr;
 pub mod mpls;
 pub mod num;
+pub mod observability;
 pub mod option;
 pub mod policy;
 pub mod protocol;

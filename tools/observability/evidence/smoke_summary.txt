@@ -1,0 +1,5 @@
+PASS offline observability smoke
+jsonl=tools/observability/evidence/sample_convergence.jsonl
+csv=tools/observability/evidence/sample_convergence.csv
+samples=8 lsdb_series=[0, 4, 12, 20, 24, 24, 24, 24]
+plateau_index=6 fib_install=false verified from files only

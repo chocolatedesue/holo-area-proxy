@@ -1,0 +1,54 @@
+# Example: control-plane only + passive metrics (YQH-603).
+# Copy paths/users as needed for local smoke; not production defaults.
+
+user = "root"
+group = "root"
+database_path = "/tmp/holo-obs-smoke/holo.db"
+
+[logging.file]
+  enabled = true
+  dir = "/tmp/holo-obs-smoke"
+  name = "holod.log"
+  rotation = "never"
+  style = "compact"
+  colors = false
+  show_thread_id = false
+  show_source = false
+
+[logging.stdout]
+  enabled = true
+  style = "compact"
+  colors = false
+  show_thread_id = false
+  show_source = false
+
+[event_recorder]
+  enabled = false
+  dir = "/tmp/holo-obs-smoke"
+
+[routing]
+  fib_install = false
+
+[observability]
+  enabled = true
+  dir = "/tmp/holo-obs-smoke"
+  file_prefix = "holod-metrics"
+  interval_ms = 500
+  format = "both"
+  include_process = true
+
+[plugins.grpc]
+  enabled = true
+  address = "127.0.0.1:15061"
+  [plugins.grpc.tls]
+    enabled = false
+    certificate = ""
+    key = ""
+
+[plugins.gnmi]
+  enabled = false
+  address = "127.0.0.1:10161"
+  [plugins.gnmi.tls]
+    enabled = false
+    certificate = ""
+    key = ""
