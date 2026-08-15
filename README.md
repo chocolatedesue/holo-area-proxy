@@ -376,7 +376,7 @@ more at the [NLnet project page](https://nlnet.nl/project/HoloRouting/).
 
 ## Passive observability (JSONL/CSV)
 
-Control-plane metrics export (default off): open `[observability]` in `holod.toml`, run a lab, analyze only log files — see [`docs/observability.md`](docs/observability.md). Combines with `[routing] fib_install = false`.
+Control-plane metrics export (default off): open `[observability]` in `holod.toml`, run a lab, analyze only log files — see [`docs/observability.md`](docs/observability.md). Combines with `[routing] fib_install = false`. **Recommended source tip:** `main` >= `4ee13d7` (do not default to `feat/yqh603-*`).
 
 ## License
 
