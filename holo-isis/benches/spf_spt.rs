@@ -12,8 +12,8 @@ use std::time::Duration;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use holo_isis::spf_profiling::{
-    collect_scale_samples, write_samples_csv, write_samples_json, SpfProfilingHarness,
-    SPF_METHOD_REAL,
+    SPF_METHOD_REAL, SpfProfilingHarness, collect_scale_samples,
+    write_samples_csv, write_samples_json,
 };
 
 fn bench_flat_vs_proxy(c: &mut Criterion) {
@@ -69,7 +69,8 @@ fn bench_flat_vs_proxy(c: &mut Criterion) {
     let out_dir = std::env::var("YQH162_BENCH_OUT")
         .map(PathBuf::from)
         .unwrap_or_else(|_| {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/yqh162-spf-spt")
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("target/yqh162-spf-spt")
         });
     let _ = std::fs::create_dir_all(&out_dir);
     let sizes = [(4usize, 4), (6, 6), (8, 8), (10, 10)];

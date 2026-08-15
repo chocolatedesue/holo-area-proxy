@@ -22,7 +22,6 @@ use tokio::sync::mpsc;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::adjacency::{Adjacency, AdjacencyEvent, AdjacencyState};
-use crate::area_proxy;
 use crate::collections::{Adjacencies, Arena, InterfaceId, InterfaceIndex};
 use crate::debug::{Debug, InterfaceInactiveReason};
 use crate::error::{Error, IoError};
@@ -38,7 +37,7 @@ use crate::packet::tlv::{
 };
 use crate::packet::{LanId, LevelNumber, LevelType, Levels, LspId, SystemId};
 use crate::tasks::messages::output::NetTxPduMsg;
-use crate::{network, tasks};
+use crate::{area_proxy, network, tasks};
 
 #[derive(Debug)]
 pub struct Interface {

@@ -11,10 +11,10 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use derive_new::new;
 use serde::{Deserialize, Serialize};
 
+use crate::packet::SystemId;
 use crate::packet::error::{TlvDecodeError, TlvDecodeResult};
 use crate::packet::iana::AreaProxyStlvType;
 use crate::packet::tlv::{TLV_HDR_SIZE, tlv_encode_end, tlv_encode_start};
-use crate::packet::SystemId;
 
 /// Area Proxy System Identifier Sub-TLV (type 1).
 ///

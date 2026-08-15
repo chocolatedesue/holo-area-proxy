@@ -81,7 +81,8 @@ impl SpfProfilingHarness {
         let (proto_tx, proto_rx) = Instance::protocol_input_channels();
 
         #[cfg(feature = "testing")]
-        let (proto_out_tx, proto_out_rx) = mpsc::channel::<ProtocolOutputMsg>(4);
+        let (proto_out_tx, proto_out_rx) =
+            mpsc::channel::<ProtocolOutputMsg>(4);
         let tx = InstanceChannelsTx {
             nb: nb_tx,
             ibus: ibus_tx,
@@ -90,8 +91,11 @@ impl SpfProfilingHarness {
             protocol_output: proto_out_tx,
         };
 
-        let mut instance =
-            Instance::new("spf-profiling".to_owned(), InstanceShared::default(), tx);
+        let mut instance = Instance::new(
+            "spf-profiling".to_owned(),
+            InstanceShared::default(),
+            tx,
+        );
         instance.state = Some(InstanceState::new(1));
         instance.config = profiling_instance_cfg();
 
@@ -377,11 +381,11 @@ fn _spt_touch(spt: &Spt) -> usize {
     spt.iter().count()
 }
 
-
 #[cfg(test)]
 mod export_tests {
-    use super::*;
     use std::path::PathBuf;
+
+    use super::*;
 
     #[test]
     fn export_samples_to_env_dir() {
@@ -392,10 +396,18 @@ mod export_tests {
         let sizes = [(4usize, 4), (6, 6), (8, 8), (10, 10)];
         let samples = collect_scale_samples(&sizes, 20);
         assert!(samples.iter().all(|s| s.spf_method == SPF_METHOD_REAL));
-        let flat36 = samples.iter().find(|s| s.n_nodes == 36 && s.mode == "flat").unwrap();
+        let flat36 = samples
+            .iter()
+            .find(|s| s.n_nodes == 36 && s.mode == "flat")
+            .unwrap();
         assert!(flat36.spt_vertices >= 36, "verts={}", flat36.spt_vertices);
-        write_samples_csv(&out.join("spf_spt_real_compute_spt.csv"), &samples).unwrap();
-        write_samples_json(&out.join("spf_spt_real_compute_spt.json"), &samples).unwrap();
+        write_samples_csv(&out.join("spf_spt_real_compute_spt.csv"), &samples)
+            .unwrap();
+        write_samples_json(
+            &out.join("spf_spt_real_compute_spt.json"),
+            &samples,
+        )
+        .unwrap();
         eprintln!("exported {} samples to {}", samples.len(), out.display());
     }
 }

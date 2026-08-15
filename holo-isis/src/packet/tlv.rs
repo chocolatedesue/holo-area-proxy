@@ -2964,11 +2964,9 @@ impl AreaProxyTlv {
                 }
                 // Area SID (type 2) deferred to a later phase — keep as unknown.
                 _ => {
-                    sub_tlvs.unknown.push(UnknownTlv::new(
-                        stlv_type,
-                        stlv_len,
-                        buf_stlv,
-                    ));
+                    sub_tlvs
+                        .unknown
+                        .push(UnknownTlv::new(stlv_type, stlv_len, buf_stlv));
                 }
             }
         }
@@ -3003,4 +3001,3 @@ impl Tlv for AreaProxyTlv {
         len
     }
 }
-

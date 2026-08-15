@@ -673,9 +673,10 @@ impl Rib {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use holo_utils::southbound::{RouteKind, RouteOpaqueAttrs};
     use tokio::sync::mpsc;
+
+    use super::*;
 
     fn dummy_owner() -> IbusClientId {
         IbusClientId::default()
