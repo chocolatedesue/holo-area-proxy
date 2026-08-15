@@ -15,7 +15,7 @@ use holo_northbound::configuration::{
     CommitPhase, ConfigChange, Provider, ValidateFn,
 };
 use holo_northbound::{NbDaemonSender, NbProviderReceiver, Path, api as papi};
-use holo_protocol::InstanceShared;
+use holo_protocol::{InstanceShared, IsisSpfConfig};
 use holo_utils::task::{Task, TimeoutTask};
 use holo_utils::yang::{ContextExt, SchemaNodeExt};
 use holo_utils::{Database, ibus};
@@ -650,6 +650,20 @@ impl Default for ConfirmedCommit {
 
 // ===== helper functions =====
 
+/// Resolve IS-IS SPF process-start defaults from TOML + env + YANG DFLT (D12).
+#[cfg(feature = "isis")]
+fn resolve_isis_spf_shared(config: &Config) -> Option<IsisSpfConfig> {
+    let file = config.isis.spf.to_sources();
+    let env = holo_isis::spf_config::read_spf_env();
+    let dflt = holo_isis::spf_config::yang_spf_defaults();
+    Some(holo_isis::spf_config::resolve_spf_defaults(&file, &env, &dflt))
+}
+
+#[cfg(not(feature = "isis"))]
+fn resolve_isis_spf_shared(_config: &Config) -> Option<IsisSpfConfig> {
+    None
+}
+
 // Starts base data providers.
 #[allow(unused_mut, unused_variables)]
 fn start_providers(
@@ -672,6 +686,7 @@ fn start_providers(
         db: Some(db),
         event_recorder_config: Some(config.event_recorder.clone()),
         observability: observability_metrics,
+        isis_spf: resolve_isis_spf_shared(config),
         ..Default::default()
     };
 

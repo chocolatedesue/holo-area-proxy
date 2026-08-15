@@ -81,6 +81,22 @@ database_path = "/var/opt/holo/holo.db"
   # Best-effort process RSS from /proc/self/status
   include_process = true
 
+# IS-IS process-start SPF defaults (static; not hot-reloaded).
+# Priority per field: explicit value here > HOLO_ISIS_SPF_* env > YANG/code default.
+# Northbound (gRPC/gNMI/CLI) commits override the running instance afterwards.
+# get-config only reflects committed YANG and may disagree with these startup
+# defaults until the same values are also committed via northbound.
+# Omit a key to leave it unset (env or YANG default applies).
+[isis.spf]
+  # Master switch for automatic SPF (RFC 8405 delay FSM). Default true.
+  enabled = true
+  # RFC 8405 delay parameters (milliseconds)
+  initial_delay = 50
+  short_delay = 200
+  long_delay = 5000
+  hold_down = 10000
+  time_to_learn = 500
+
 # Daemon plugins
 [plugins]
   # gRPC northbound plugin configuration

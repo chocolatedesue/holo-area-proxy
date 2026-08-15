@@ -307,6 +307,33 @@ on top of upstream Holo IS-IS.
 
 Dynamic Area Leader election (RFC 9667) and full dual-view SPF (RFC 9666 §3.2) are **out of scope** for this milestone; use static `role`.
 
+### SPF control (enable/disable + RFC 8405 delay)
+
+IS-IS already implements the RFC 8405 SPF Back-Off Delay FSM. This fork adds a
+**global automatic-SPF master switch** and process-start defaults via
+`holod.toml` / environment variables (in addition to northbound YANG).
+
+| Surface | Location |
+|---|---|
+| YANG | `isis/spf-control/holo-isis:enabled` (default `true`); existing `ietf-spf-delay/*` delay leaves |
+| `holod.toml` | `[isis.spf]` — `enabled`, `initial_delay`, `short_delay`, `long_delay`, `hold_down`, `time_to_learn` (ms) |
+| Environment | `HOLO_ISIS_SPF_ENABLED`, `HOLO_ISIS_SPF_INITIAL_DELAY`, `HOLO_ISIS_SPF_SHORT_DELAY`, `HOLO_ISIS_SPF_LONG_DELAY`, `HOLO_ISIS_SPF_HOLD_DOWN`, `HOLO_ISIS_SPF_TIME_TO_LEARN` |
+
+**Priority (per field):** explicit `holod.toml` value > env > YANG/code default.
+Northbound commits **override** the running instance after start. File/env are
+**not** hot-reloaded.
+
+**`get-config` vs file/env:** northbound get-config only reflects values that
+have been committed into the YANG datastore. Startup file/env defaults may
+therefore disagree with get-config until the same values are also committed.
+
+**Disable semantics (`enabled = false`):**
+- Automatic SPF scheduling/execution stops (SPF Delay FSM entry is gated).
+- LSDB updates, flooding, and adjacency formation **continue**.
+- RIB is left **stale** (no flush, no freeze RPC).
+- Re-enable triggers a full SPF (`RerunSpf`), same as changing `spf-control/paths`.
+- There is **no** separate manual SPF RPC. MANET/flooding `compute_spt` is not gated.
+
 ### Example configuration (JSON)
 
 ```json

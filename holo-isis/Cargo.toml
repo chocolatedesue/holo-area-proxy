@@ -63,3 +63,10 @@ workspace = true
 default = []
 testing = []
 deterministic = []
+# Measurement-only surface for real compute_spt benches (YQH-162). Default CI must not enable.
+profiling = []
+
+[[bench]]
+name = "spf_spt"
+harness = false
+required-features = ["profiling"]
