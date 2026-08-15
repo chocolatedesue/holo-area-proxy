@@ -16,6 +16,7 @@ use chrono::Utc;
 use derive_new::new;
 use holo_utils::ip::{AddressFamily, IpNetworkKind};
 use holo_utils::mac_addr::MacAddr;
+use holo_utils::metrics_emit;
 use holo_utils::sr::IgpAlgoType;
 use holo_utils::task::TimeoutTask;
 use ipnetwork::IpNetwork;
@@ -889,9 +890,33 @@ fn compute_spf(
     spf_sched.last_time = Some(end_time);
 
     // Log SPF completion and duration.
+    let run_duration = end_time - start_time;
     if instance.config.trace_opts.spf {
-        let run_duration = end_time - start_time;
         Debug::SpfFinish(run_duration).log();
+    }
+
+    // Machine-parseable domain metrics (NDJSON sink; no-op when off).
+    if metrics_emit::is_enabled() {
+        let schedule_to_start_us =
+            schedule_time.map(|t| start_time.saturating_duration_since(t).as_micros() as u64);
+        let spf_type_str = match spf_type {
+            SpfType::Full => "full",
+            SpfType::RouteOnly => "route_only",
+        };
+        let level_str = match level {
+            LevelNumber::L1 => "L1",
+            LevelNumber::L2 => "L2",
+        };
+        let spf_runs = instance.state.counters.get(level).spf_runs;
+        metrics_emit::emit_isis_spf_finish(
+            instance.name,
+            &level_str,
+            spf_type_str,
+            run_duration.as_micros() as u64,
+            schedule_to_start_us,
+            trigger_lsps.len(),
+            spf_runs,
+        );
     }
 
     // Add entry to SPF log.

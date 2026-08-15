@@ -17,9 +17,25 @@ pub struct Config {
     pub database_path: String,
     pub logging: Logging,
     pub event_recorder: event_recorder::Config,
+    /// Machine-parseable domain metrics (NDJSON). See [`Observability`].
+    pub observability: Observability,
     pub plugins: Plugins,
     pub routing: Routing,
     pub isis: Isis,
+}
+
+/// Passive-first domain metrics for offline analysis (YQH-595 follow-up).
+///
+/// When `metrics_ndjson_enabled` is true, holod appends one JSON object per
+/// line to `metrics_ndjson_path`. Pull the file after the run — no GetState
+/// polling required for these events.
+#[derive(Debug, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Observability {
+    /// Write structured domain metrics as NDJSON (default: false).
+    pub metrics_ndjson_enabled: bool,
+    /// Output path (must be writable by the holod user after privdrop).
+    pub metrics_ndjson_path: String,
 }
 
 /// Global routing / FIB behaviour controlled from holod.toml.
@@ -154,9 +170,21 @@ impl Default for Config {
             database_path: "/var/opt/holo/holo.db".to_owned(),
             logging: Default::default(),
             event_recorder: Default::default(),
+            observability: Default::default(),
             plugins: Default::default(),
             routing: Default::default(),
             isis: Default::default(),
+        }
+    }
+}
+
+// ===== impl Observability =====
+
+impl Default for Observability {
+    fn default() -> Observability {
+        Observability {
+            metrics_ndjson_enabled: false,
+            metrics_ndjson_path: "/var/log/holod-metrics.jsonl".to_owned(),
         }
     }
 }

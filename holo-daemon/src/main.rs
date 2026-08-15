@@ -274,6 +274,18 @@ fn main() {
         std::process::exit(1);
     }
 
+    // Domain metrics NDJSON sink (after privdrop so path is owned by holod user).
+    holo_utils::metrics_emit::init(
+        config.observability.metrics_ndjson_enabled,
+        &config.observability.metrics_ndjson_path,
+    );
+    if config.observability.metrics_ndjson_enabled {
+        info!(
+            path = %config.observability.metrics_ndjson_path,
+            "observability metrics NDJSON sink enabled"
+        );
+    }
+
     // We're ready to go!
     info!("starting up");
 

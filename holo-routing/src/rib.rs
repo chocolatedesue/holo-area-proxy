@@ -409,6 +409,8 @@ impl Rib {
         // Copy so gates do not conflict with borrows of RIB entries.
         let fib_install = self.fib_install;
         let fib_stats = Arc::clone(&self.fib_stats);
+        let prefixes_touched = self.ip_update_queue.len();
+        let mpls_touched = self.mpls_update_queue.len();
 
         // Process IP update queue.
         while let Some(prefix) = self.ip_update_queue.pop_first() {
@@ -548,6 +550,28 @@ impl Rib {
             }
         }
         self.nht = nht;
+
+        // Passive-first domain metrics (no-op when observability sink is off).
+        if holo_utils::metrics_emit::is_enabled() {
+            let snap = fib_stats.snapshot();
+            let (v4, v6, mpls) = self.rib_size_snapshot();
+            holo_utils::metrics_emit::emit_routing_rib_batch(
+                fib_install,
+                prefixes_touched,
+                mpls_touched,
+                v4,
+                v6,
+                mpls,
+                snap.ip_installs,
+                snap.ip_installs_skipped,
+                snap.ip_uninstalls,
+                snap.ip_uninstalls_skipped,
+                snap.mpls_installs,
+                snap.mpls_installs_skipped,
+                snap.mpls_uninstalls,
+                snap.mpls_uninstalls_skipped,
+            );
+        }
     }
 
     // Returns RIB entry associated to the given IP prefix.
