@@ -651,15 +651,14 @@ impl Rib {
             if let Some(route) = rib_prefix
                 .iter()
                 .find(|route| route.flags.contains(RouteFlags::ACTIVE))
+                && route.protocol != Protocol::DIRECT
             {
-                if route.protocol != Protocol::DIRECT {
-                    FibStats::inc(&fib_stats.ip_uninstalls);
-                    netlink::ip_route_uninstall(
-                        netlink_tx,
-                        &prefix,
-                        route.protocol,
-                    );
-                }
+                FibStats::inc(&fib_stats.ip_uninstalls);
+                netlink::ip_route_uninstall(
+                    netlink_tx,
+                    &prefix,
+                    route.protocol,
+                );
             }
         }
         for (label, route) in &self.mpls {

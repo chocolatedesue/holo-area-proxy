@@ -1401,17 +1401,16 @@ pub(crate) fn process_send_psnp(
         // §5.2: drop filtered entries on outside-facing interfaces.
         if let Some((_, lse)) =
             lsdb.get_by_lspid(&arenas.lsp_entries, &lsp_entry.lsp_id)
-        {
-            if !area_proxy::may_flood_lsp(
+            && !area_proxy::may_flood_lsp(
                 instance.config,
                 outside,
                 level,
                 &lse.data,
                 lsdb_l1,
                 &arenas.lsp_entries,
-            ) {
-                continue;
-            }
+            )
+        {
+            continue;
         }
         lsp_entries.push(lsp_entry);
     }

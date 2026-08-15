@@ -7,7 +7,7 @@
 // See: https://nlnet.nl/NGI0
 //
 
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{Bytes, BytesMut};
 use derive_new::new;
 use serde::{Deserialize, Serialize};
 
@@ -49,6 +49,7 @@ impl AreaProxySystemIdStlv {
         TLV_HDR_SIZE + Self::SIZE as usize
     }
 
+    #[allow(dead_code)] // accessor for TLV consumers
     pub(crate) fn get(&self) -> &SystemId {
         &self.0
     }

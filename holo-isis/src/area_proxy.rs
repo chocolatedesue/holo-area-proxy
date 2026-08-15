@@ -24,6 +24,7 @@ use crate::packet::tlv::{AreaProxyTlv, Ipv4Reach, Ipv6Reach, IsReach};
 use crate::packet::{LevelNumber, LspId, SystemId};
 
 /// Returns true when Area Proxy is enabled on the instance.
+#[allow(dead_code)] // retained for callers/future gating
 pub(crate) fn is_enabled(cfg: &InstanceCfg) -> bool {
     cfg.area_proxy.enabled
 }
