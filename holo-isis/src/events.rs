@@ -15,7 +15,6 @@ use chrono::Utc;
 use holo_utils::mac_addr::MacAddr;
 
 use crate::adjacency::{Adjacency, AdjacencyEvent, AdjacencyState};
-use crate::area_proxy;
 use crate::collections::{
     AdjacencyKey, InterfaceIndex, InterfaceKey, LspEntryKey,
 };
@@ -34,7 +33,7 @@ use crate::packet::pdu::{Hello, HelloVariant, Lsp, Pdu, Snp, SnpTlvs};
 use crate::packet::tlv::{ExtendedSeqNum, ExtendedSeqNumTlv, ThreeWayAdjState};
 use crate::packet::{LanId, LevelNumber, LevelType, LspId};
 use crate::spf::SpfType;
-use crate::{adjacency, flooding, spf};
+use crate::{adjacency, area_proxy, flooding, spf};
 
 // ===== Network PDU receipt =====
 
@@ -741,7 +740,13 @@ fn process_pdu_lsp(
             // from the network.
             lsp.set_rem_lifetime(0);
             for iface in arenas.interfaces.iter_mut() {
-                iface.srm_list_add(instance, &arenas.lsp_entries, level, &lsp, false);
+                iface.srm_list_add(
+                    instance,
+                    &arenas.lsp_entries,
+                    level,
+                    &lsp,
+                    false,
+                );
             }
             return Ok(());
         }
@@ -839,8 +844,7 @@ fn process_pdu_lsp(
             {
                 // Determine whether the LSP should be flooded out this
                 // interface (MANET ∧ Area Proxy §5.2).
-                let manet_ok = match instance.config.flooding_reduction.algo
-                {
+                let manet_ok = match instance.config.flooding_reduction.algo {
                     FloodingAlgo::ZeroPruner => true,
                     FloodingAlgo::ModifiedManet => {
                         flooding::manet::should_flood(
@@ -860,8 +864,13 @@ fn process_pdu_lsp(
                 );
                 let allow_flood = ap_ok && manet_ok;
                 if instance.config.trace_opts.flood_reduction {
-                    Debug::FloodDecision(level, &lsp, other_iface, !allow_flood)
-                        .log();
+                    Debug::FloodDecision(
+                        level,
+                        &lsp,
+                        other_iface,
+                        !allow_flood,
+                    )
+                    .log();
                 }
                 if allow_flood {
                     other_iface.srm_list_add(
@@ -954,7 +963,13 @@ fn process_pdu_lsp(
 
             // Update LSP flooding flags for the incoming interface.
             if allow_flood {
-                iface.srm_list_add(instance, &arenas.lsp_entries, level, &db_lsp, false);
+                iface.srm_list_add(
+                    instance,
+                    &arenas.lsp_entries,
+                    level,
+                    &db_lsp,
+                    false,
+                );
                 iface.ssn_list_del(level, &lsp.lsp_id);
             } else if ap_ok {
                 iface.ssn_list_add(level, db_lsp.as_snp_entry());
@@ -1090,7 +1105,13 @@ fn process_pdu_snp(
                 }
                 Ordering::Greater => {
                     iface.ssn_list_del(level, &entry.lsp_id);
-                    iface.srm_list_add(instance, &arenas.lsp_entries, level, &lse.data, false);
+                    iface.srm_list_add(
+                        instance,
+                        &arenas.lsp_entries,
+                        level,
+                        &lse.data,
+                        false,
+                    );
                 }
                 Ordering::Less => {
                     iface.ssn_list_add(level, lse.data.as_snp_entry());
@@ -1138,7 +1159,13 @@ fn process_pdu_snp(
             // Exclude LSPs with zero sequence number.
             .filter(|lsp| lsp.seqno != 0)
         {
-            iface.srm_list_add(instance, &arenas.lsp_entries, level, lsp, false);
+            iface.srm_list_add(
+                instance,
+                &arenas.lsp_entries,
+                level,
+                lsp,
+                false,
+            );
         }
     }
 
@@ -1374,17 +1401,16 @@ pub(crate) fn process_send_psnp(
         // §5.2: drop filtered entries on outside-facing interfaces.
         if let Some((_, lse)) =
             lsdb.get_by_lspid(&arenas.lsp_entries, &lsp_entry.lsp_id)
-        {
-            if !area_proxy::may_flood_lsp(
+            && !area_proxy::may_flood_lsp(
                 instance.config,
                 outside,
                 level,
                 &lse.data,
                 lsdb_l1,
                 &arenas.lsp_entries,
-            ) {
-                continue;
-            }
+            )
+        {
+            continue;
         }
         lsp_entries.push(lsp_entry);
     }
@@ -1598,17 +1624,20 @@ pub(crate) fn process_lsp_delete(
     lse_key: LspEntryKey,
 ) -> Result<(), Error> {
     // Lookup LSP entry in the LSDB.
-    let lsdb = instance.state.lsdb.get_mut(level);
-    let (lse_idx, lse) = lsdb.get_by_key(&arenas.lsp_entries, &lse_key)?;
-    assert!(lse.flags.contains(LspEntryFlags::PURGED));
+    {
+        let lsdb = instance.state.lsdb.get_mut(level);
+        let (lse_idx, lse) = lsdb.get_by_key(&arenas.lsp_entries, &lse_key)?;
+        assert!(lse.flags.contains(LspEntryFlags::PURGED));
 
-    // Log LSP deletion.
-    if instance.config.trace_opts.lsdb {
-        Debug::LspDelete(level, &lse.data).log();
+        // Log LSP deletion.
+        if instance.config.trace_opts.lsdb {
+            Debug::LspDelete(level, &lse.data).log();
+        }
+
+        // Delete the LSP entry from the LSDB.
+        lsdb.delete(&mut arenas.lsp_entries, lse_idx);
     }
-
-    // Delete the LSP entry from the LSDB.
-    lsdb.delete(&mut arenas.lsp_entries, lse_idx);
+    lsdb::observability_publish_lsdb(instance, level);
 
     Ok(())
 }

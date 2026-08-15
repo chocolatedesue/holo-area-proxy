@@ -12,11 +12,11 @@ use holo_utils::ip::AddressFamily;
 use ipnetwork::{Ipv4Network, Ipv6Network};
 
 use crate::collections::{Arena, Lsdb};
-use crate::lsdb::LspEntry;
 use crate::debug::LspPurgeReason;
 use crate::instance::{InstanceArenas, InstanceUpView};
 use crate::interface::Interface;
 use crate::lsdb;
+use crate::lsdb::LspEntry;
 use crate::northbound::configuration::{AreaProxyRole, InstanceCfg};
 use crate::packet::iana::Nlpid;
 use crate::packet::pdu::{Lsp, LspFlags, LspTlvs};
@@ -24,6 +24,7 @@ use crate::packet::tlv::{AreaProxyTlv, Ipv4Reach, Ipv6Reach, IsReach};
 use crate::packet::{LevelNumber, LspId, SystemId};
 
 /// Returns true when Area Proxy is enabled on the instance.
+#[allow(dead_code)] // retained for callers/future gating
 pub(crate) fn is_enabled(cfg: &InstanceCfg) -> bool {
     cfg.area_proxy.enabled
 }
@@ -356,11 +357,7 @@ pub(crate) fn originate_proxy_lsp(
 
     let seqno = old.map(|l| l.seqno.wrapping_add(1)).unwrap_or(1);
     let flags = LspFlags::IS_TYPE2;
-    let auth = instance
-        .config
-        .auth
-        .all
-        .method(&instance.shared.keychains);
+    let auth = instance.config.auth.all.method(&instance.shared.keychains);
     let lsp = Lsp::new(
         level,
         instance.config.lsp_lifetime,
@@ -389,10 +386,11 @@ pub(crate) fn purge_proxy_lsp(
         .map(|lse| lse.id)
         .collect();
     for id in ids {
-        instance
-            .tx
-            .protocol_input
-            .lsp_purge(level, id, LspPurgeReason::Removed);
+        instance.tx.protocol_input.lsp_purge(
+            level,
+            id,
+            LspPurgeReason::Removed,
+        );
     }
 }
 

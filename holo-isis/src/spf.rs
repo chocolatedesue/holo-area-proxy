@@ -546,13 +546,12 @@ pub(crate) fn compute_spt(
     let metric_type = instance.config.metric_type.get(level);
     let mut used_adjs = BTreeSet::new();
     // RFC 9666 §3.2: Inside routers MUST ignore the Proxy LSP in L2 SPF.
-    let proxy_sid = if instance.config.area_proxy.enabled
-        && level == LevelNumber::L2
-    {
-        instance.config.area_proxy.proxy_system_id
-    } else {
-        None
-    };
+    let proxy_sid =
+        if instance.config.area_proxy.enabled && level == LevelNumber::L2 {
+            instance.config.area_proxy.proxy_system_id
+        } else {
+            None
+        };
 
     // Get root vertex.
     let root_vid = VertexId::from(root_system_id);
@@ -778,7 +777,6 @@ pub fn compute_spt_for_profiling(
     )
 }
 
-
 // ===== helper functions =====
 
 // Main function for SPF computation.
@@ -889,9 +887,16 @@ fn compute_spf(
     spf_sched.last_time = Some(end_time);
 
     // Log SPF completion and duration.
+    let run_duration = end_time - start_time;
     if instance.config.trace_opts.spf {
-        let run_duration = end_time - start_time;
         Debug::SpfFinish(run_duration).log();
+    }
+    if let Some(obs) = instance.shared.observability.as_ref() {
+        let lvl = match level {
+            LevelNumber::L1 => 1u8,
+            LevelNumber::L2 => 2u8,
+        };
+        obs.record_spf(lvl, run_duration.as_micros() as u64);
     }
 
     // Add entry to SPF log.

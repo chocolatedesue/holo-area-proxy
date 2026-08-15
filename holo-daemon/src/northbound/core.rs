@@ -656,7 +656,9 @@ fn resolve_isis_spf_shared(config: &Config) -> Option<IsisSpfConfig> {
     let file = config.isis.spf.to_sources();
     let env = holo_isis::spf_config::read_spf_env();
     let dflt = holo_isis::spf_config::yang_spf_defaults();
-    Some(holo_isis::spf_config::resolve_spf_defaults(&file, &env, &dflt))
+    Some(holo_isis::spf_config::resolve_spf_defaults(
+        &file, &env, &dflt,
+    ))
 }
 
 #[cfg(not(feature = "isis"))]
@@ -680,9 +682,12 @@ fn start_providers(
     let mut validation_fns = Vec::new();
     let (provider_tx, provider_rx) = mpsc::unbounded_channel();
     let (ibus_tx, ibus_rx) = ibus::ibus_channels();
+    let observability_metrics =
+        holo_utils::observability::maybe_start(&config.observability);
     let shared = InstanceShared {
         db: Some(db),
         event_recorder_config: Some(config.event_recorder.clone()),
+        observability: observability_metrics,
         isis_spf: resolve_isis_spf_shared(config),
         ..Default::default()
     };

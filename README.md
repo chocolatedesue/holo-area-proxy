@@ -373,6 +373,11 @@ more at the [NLnet project page](https://nlnet.nl/project/HoloRouting/).
 [<img src="https://nlnet.nl/logo/banner.png" alt="NLnet foundation logo" width="20%" />](https://nlnet.nl)
 [<img src="https://nlnet.nl/image/logos/NGI0_tag.svg" alt="NGI Zero Logo" width="20%" />](https://nlnet.nl/core)
 
+
+## Passive observability (JSONL/CSV)
+
+Control-plane metrics export (default off): open `[observability]` in `holod.toml`, run a lab, analyze only log files — see [`docs/observability.md`](docs/observability.md). Combines with `[routing] fib_install = false`.
+
 ## License
 
 This project is licensed under the [MIT license].

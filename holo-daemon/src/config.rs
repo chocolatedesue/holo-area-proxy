@@ -7,6 +7,7 @@
 #![allow(clippy::derivable_impls)]
 
 use holo_protocol::event_recorder;
+use holo_utils::observability;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -17,6 +18,7 @@ pub struct Config {
     pub database_path: String,
     pub logging: Logging,
     pub event_recorder: event_recorder::Config,
+    pub observability: observability::Config,
     pub plugins: Plugins,
     pub routing: Routing,
     pub isis: Isis,
@@ -154,6 +156,7 @@ impl Default for Config {
             database_path: "/var/opt/holo/holo.db".to_owned(),
             logging: Default::default(),
             event_recorder: Default::default(),
+            observability: Default::default(),
             plugins: Default::default(),
             routing: Default::default(),
             isis: Default::default(),
@@ -202,7 +205,6 @@ impl IsisSpf {
         }
     }
 }
-
 
 // ===== impl LoggingJournald =====
 

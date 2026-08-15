@@ -459,7 +459,6 @@ impl TryFromYang for FloodingAlgo {
     }
 }
 
-
 impl TryFromYang for AreaProxyRole {
     fn try_from_yang(value: &str) -> Option<AreaProxyRole> {
         match value {
@@ -481,7 +480,6 @@ impl TryFromYang for InterfaceFacing {
         }
     }
 }
-
 
 impl TryFromYang for ExtendedSeqNumMode {
     fn try_from_yang(value: &str) -> Option<ExtendedSeqNumMode> {

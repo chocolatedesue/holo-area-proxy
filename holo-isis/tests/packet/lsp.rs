@@ -10,8 +10,8 @@
 use std::sync::LazyLock as Lazy;
 
 use const_addrs::{ip4, ip6, net4, net6};
-use holo_isis::packet::iana::{AslaSabmFlags, FadFlags, FloodingAlgo};
 use holo_isis::packet::auth::AuthMethod;
+use holo_isis::packet::iana::{AslaSabmFlags, FadFlags, FloodingAlgo};
 use holo_isis::packet::pdu::{Lsp, LspFlags, LspTlvs, Pdu};
 use holo_isis::packet::subtlvs::MsdStlv;
 use holo_isis::packet::subtlvs::capability::{
@@ -34,13 +34,13 @@ use holo_isis::packet::subtlvs::prefix::{
 };
 use holo_isis::packet::subtlvs::spb::{IsidEntry, IsidFlags, SpbmSiStlv};
 use holo_isis::packet::tlv::{
-    AreaAddressesTlv, AreaProxyTlv, DynamicHostnameTlv, Ipv4AddressesTlv, Ipv4Reach,
-    Ipv4ReachStlvs, Ipv4ReachTlv, Ipv4RouterIdTlv, Ipv6AddressesTlv, Ipv6Reach,
-    Ipv6ReachStlvs, Ipv6ReachTlv, Ipv6RouterIdTlv, IsReach, IsReachStlvs,
-    IsReachTlv, LegacyIpv4Reach, LegacyIpv4ReachTlv, LegacyIsReach,
-    LegacyIsReachTlv, LspBufferSizeTlv, MtCapStlvs, MtCapabilityTlv, MtFlags,
-    MultiTopologyEntry, MultiTopologyTlv, ProtocolsSupportedTlv,
-    PurgeOriginatorIdTlv, RouterCapFlags,
+    AreaAddressesTlv, AreaProxyTlv, DynamicHostnameTlv, Ipv4AddressesTlv,
+    Ipv4Reach, Ipv4ReachStlvs, Ipv4ReachTlv, Ipv4RouterIdTlv, Ipv6AddressesTlv,
+    Ipv6Reach, Ipv6ReachStlvs, Ipv6ReachTlv, Ipv6RouterIdTlv, IsReach,
+    IsReachStlvs, IsReachTlv, LegacyIpv4Reach, LegacyIpv4ReachTlv,
+    LegacyIsReach, LegacyIsReachTlv, LspBufferSizeTlv, MtCapStlvs,
+    MtCapabilityTlv, MtFlags, MultiTopologyEntry, MultiTopologyTlv,
+    ProtocolsSupportedTlv, PurgeOriginatorIdTlv, RouterCapFlags,
     RouterCapStlvs, RouterCapTlv,
 };
 use holo_isis::packet::{AreaAddr, LanId, LevelNumber, LspId, SystemId};
@@ -1129,46 +1129,47 @@ static LSP_AREA_PROXY: Lazy<(Vec<u8>, Option<&Key>, Pdu)> = Lazy::new(|| {
     (bytes, None, pdu)
 });
 
-static LSP_AREA_PROXY_EMPTY: Lazy<(Vec<u8>, Option<&Key>, Pdu)> = Lazy::new(|| {
-    let pdu = Pdu::Lsp(Lsp::new(
-        LevelNumber::L2,
-        1170,
-        LspId::from([0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00]),
-        0x0000000b,
-        LspFlags::IS_TYPE2 | LspFlags::IS_TYPE1,
-        LspTlvs {
-            auth: None,
-            protocols_supported: Some(ProtocolsSupportedTlv {
-                list: vec![0xcc],
-            }),
-            router_cap: vec![],
-            mt_cap: vec![],
-            area_proxy: Some(AreaProxyTlv::default()),
-            area_addrs: vec![],
-            multi_topology: vec![],
-            purge_originator_id: None,
-            hostname: None,
-            lsp_buf_size: None,
-            is_reach: vec![],
-            ext_is_reach: vec![],
-            mt_is_reach: vec![],
-            ipv4_addrs: vec![],
-            ipv4_internal_reach: vec![],
-            ipv4_external_reach: vec![],
-            ext_ipv4_reach: vec![],
-            mt_ipv4_reach: vec![],
-            ipv4_router_id: None,
-            ipv6_addrs: vec![],
-            ipv6_reach: vec![],
-            mt_ipv6_reach: vec![],
-            ipv6_router_id: None,
-            unknown: vec![],
-        },
-        None,
-    ));
-    let bytes = pdu.clone().encode(None).to_vec();
-    (bytes, None, pdu)
-});
+static LSP_AREA_PROXY_EMPTY: Lazy<(Vec<u8>, Option<&Key>, Pdu)> =
+    Lazy::new(|| {
+        let pdu = Pdu::Lsp(Lsp::new(
+            LevelNumber::L2,
+            1170,
+            LspId::from([0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00]),
+            0x0000000b,
+            LspFlags::IS_TYPE2 | LspFlags::IS_TYPE1,
+            LspTlvs {
+                auth: None,
+                protocols_supported: Some(ProtocolsSupportedTlv {
+                    list: vec![0xcc],
+                }),
+                router_cap: vec![],
+                mt_cap: vec![],
+                area_proxy: Some(AreaProxyTlv::default()),
+                area_addrs: vec![],
+                multi_topology: vec![],
+                purge_originator_id: None,
+                hostname: None,
+                lsp_buf_size: None,
+                is_reach: vec![],
+                ext_is_reach: vec![],
+                mt_is_reach: vec![],
+                ipv4_addrs: vec![],
+                ipv4_internal_reach: vec![],
+                ipv4_external_reach: vec![],
+                ext_ipv4_reach: vec![],
+                mt_ipv4_reach: vec![],
+                ipv4_router_id: None,
+                ipv6_addrs: vec![],
+                ipv6_reach: vec![],
+                mt_ipv6_reach: vec![],
+                ipv6_router_id: None,
+                unknown: vec![],
+            },
+            None,
+        ));
+        let bytes = pdu.clone().encode(None).to_vec();
+        (bytes, None, pdu)
+    });
 
 #[test]
 fn test_encode_lsp_area_proxy() {

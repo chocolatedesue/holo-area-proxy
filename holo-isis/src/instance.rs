@@ -218,6 +218,17 @@ impl Instance {
         let boot_count = self.boot_count_increment();
         let state = InstanceState::new(boot_count);
         self.state = Some(state);
+
+        if let Some(obs) = self.shared.observability.as_ref() {
+            obs.set_instance_name(self.name.clone());
+            if let Some(sid) = self.config.system_id.as_ref() {
+                let bytes: &[u8; 6] = sid.as_ref();
+                obs.set_system_id(format!(
+                    "{:02X}{:02X}.{:02X}{:02X}.{:02X}{:02X}",
+                    bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]
+                ));
+            }
+        }
         let (mut instance, arenas) = self.as_up().unwrap();
 
         // Start interfaces.

@@ -386,6 +386,12 @@ fn apply_instance(instance: &mut Instance, change: ConfigChange, event_queue: &m
                 event_queue.insert(Event::InstanceReset);
             }
             instance.config.system_id = system_id;
+            if let Some(obs) = instance.shared.observability.as_ref()
+                && let Some(sid) = instance.config.system_id.as_ref()
+            {
+                let bytes: &[u8; 6] = sid.as_ref();
+                obs.set_system_id(format!("{:02X}{:02X}.{:02X}{:02X}.{:02X}{:02X}", bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]));
+            }
             event_queue.insert(Event::InstanceUpdate);
         }
         ConfigChange::AreaAddress(op, area_addr) => {
@@ -1678,6 +1684,7 @@ impl<T> LevelsCfgWithDefault<T>
 where
     T: Copy,
 {
+    #[allow(dead_code)] // helper retained for tests/config builders
     pub(crate) fn with_all(all: T) -> Self {
         Self {
             all,
@@ -1777,24 +1784,18 @@ impl TraceOptionPacketResolved {
 
 // ===== configuration defaults =====
 
-
 impl InstanceAreaProxyCfg {
     pub fn is_enabled(&self) -> bool {
         self.enabled
     }
 
     pub fn is_leader(&self) -> bool {
-        self.enabled
-            && matches!(self.role, AreaProxyRole::Leader | AreaProxyRole::Static)
+        self.enabled && matches!(self.role, AreaProxyRole::Leader | AreaProxyRole::Static)
     }
 
     /// Whether outside-facing interfaces should use Proxy SID and filter.
     pub fn uses_proxy_sid_on_outside(&self) -> bool {
-        self.enabled
-            && matches!(
-                self.role,
-                AreaProxyRole::Edge | AreaProxyRole::Leader | AreaProxyRole::Static
-            )
+        self.enabled && matches!(self.role, AreaProxyRole::Edge | AreaProxyRole::Leader | AreaProxyRole::Static)
     }
 }
 
