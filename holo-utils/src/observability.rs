@@ -240,11 +240,7 @@ impl Metrics {
             fib_ip_uninstalls_skipped: self
                 .fib_ip_uninstalls_skipped
                 .load(Ordering::Relaxed),
-            rss_kb: if include_process {
-                read_rss_kb()
-            } else {
-                None
-            },
+            rss_kb: if include_process { read_rss_kb() } else { None },
         }
     }
 }
@@ -306,9 +302,7 @@ impl Sample {
             self.fib_ip_installs_skipped,
             self.fib_ip_uninstalls,
             self.fib_ip_uninstalls_skipped,
-            self.rss_kb
-                .map(|v| v.to_string())
-                .unwrap_or_default()
+            self.rss_kb.map(|v| v.to_string()).unwrap_or_default()
         )
     }
 }
@@ -331,8 +325,7 @@ impl Exporter {
         let mut csv = None;
         let mut csv_path = None;
 
-        let want_jsonl =
-            matches!(config.format, Format::Jsonl | Format::Both);
+        let want_jsonl = matches!(config.format, Format::Jsonl | Format::Both);
         let want_csv = matches!(config.format, Format::Csv | Format::Both);
 
         if want_jsonl {
@@ -368,16 +361,13 @@ impl Exporter {
     }
 
     pub fn paths(&self) -> (Option<&Path>, Option<&Path>) {
-        (
-            self.jsonl_path.as_deref(),
-            self.csv_path.as_deref(),
-        )
+        (self.jsonl_path.as_deref(), self.csv_path.as_deref())
     }
 
     pub fn write_sample(&mut self, sample: &Sample) -> std::io::Result<()> {
         if let Some(w) = self.jsonl.as_mut() {
-            let line = serde_json::to_string(sample)
-                .map_err(|e| std::io::Error::other(e))?;
+            let line =
+                serde_json::to_string(sample).map_err(std::io::Error::other)?;
             writeln!(w, "{line}")?;
             w.flush()?;
         }
@@ -437,15 +427,14 @@ pub fn maybe_start(config: &Config) -> Option<Arc<Metrics>> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::fs;
+
+    use super::*;
 
     #[test]
     fn csv_and_jsonl_roundtrip_fields() {
-        let dir = std::env::temp_dir().join(format!(
-            "holo-obs-test-{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir()
+            .join(format!("holo-obs-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
 

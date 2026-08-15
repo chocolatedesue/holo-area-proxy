@@ -546,13 +546,12 @@ pub(crate) fn compute_spt(
     let metric_type = instance.config.metric_type.get(level);
     let mut used_adjs = BTreeSet::new();
     // RFC 9666 §3.2: Inside routers MUST ignore the Proxy LSP in L2 SPF.
-    let proxy_sid = if instance.config.area_proxy.enabled
-        && level == LevelNumber::L2
-    {
-        instance.config.area_proxy.proxy_system_id
-    } else {
-        None
-    };
+    let proxy_sid =
+        if instance.config.area_proxy.enabled && level == LevelNumber::L2 {
+            instance.config.area_proxy.proxy_system_id
+        } else {
+            None
+        };
 
     // Get root vertex.
     let root_vid = VertexId::from(root_system_id);
@@ -777,7 +776,6 @@ pub fn compute_spt_for_profiling(
         lsp_entries,
     )
 }
-
 
 // ===== helper functions =====
 

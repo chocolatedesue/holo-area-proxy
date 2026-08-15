@@ -206,7 +206,6 @@ impl IsisSpf {
     }
 }
 
-
 // ===== impl LoggingJournald =====
 
 impl Default for LoggingJournald {

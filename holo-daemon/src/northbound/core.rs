@@ -656,7 +656,9 @@ fn resolve_isis_spf_shared(config: &Config) -> Option<IsisSpfConfig> {
     let file = config.isis.spf.to_sources();
     let env = holo_isis::spf_config::read_spf_env();
     let dflt = holo_isis::spf_config::yang_spf_defaults();
-    Some(holo_isis::spf_config::resolve_spf_defaults(&file, &env, &dflt))
+    Some(holo_isis::spf_config::resolve_spf_defaults(
+        &file, &env, &dflt,
+    ))
 }
 
 #[cfg(not(feature = "isis"))]

@@ -28,7 +28,6 @@ use ipnetwork::{IpNetwork, Ipv4Network, Ipv6Network};
 use itertools::Itertools;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::area_proxy;
 use crate::adjacency::{Adjacency, AdjacencyState};
 use crate::collections::{Arena, LspEntryId};
 use crate::debug::{Debug, LspPurgeReason};
@@ -61,7 +60,7 @@ use crate::packet::tlv::{
 use crate::packet::{LanId, LevelNumber, LevelType, LspId, SystemId};
 use crate::spf::{SpfType, VertexId};
 use crate::tasks::messages::input::LspPurgeMsg;
-use crate::{spf, tasks};
+use crate::{area_proxy, spf, tasks};
 
 // LSP ZeroAge lifetime.
 pub const LSP_ZERO_AGE_LIFETIME: u64 = 60;
@@ -389,7 +388,8 @@ fn lsp_build_tlvs(
     );
     // RFC 9666: Area Proxy TLV only on L2 LSPs (fragment 0 via next_chunk).
     if level == LevelNumber::L2 {
-        tlvs.area_proxy = area_proxy::build_local_area_proxy_tlv(instance.config);
+        tlvs.area_proxy =
+            area_proxy::build_local_area_proxy_tlv(instance.config);
     }
     tlvs
 }
@@ -458,7 +458,8 @@ fn lsp_build_tlvs_pseudo(
         None,
     );
     if level == LevelNumber::L2 {
-        tlvs.area_proxy = area_proxy::build_local_area_proxy_tlv(instance.config);
+        tlvs.area_proxy =
+            area_proxy::build_local_area_proxy_tlv(instance.config);
     }
     tlvs
 }
@@ -1714,7 +1715,13 @@ pub(crate) fn lsp_originate(
 
     // Flood LSP over all interfaces (§5.2 filter applied inside srm_list_add).
     for iface in arenas.interfaces.iter_mut() {
-        iface.srm_list_add(instance, &arenas.lsp_entries, level, &lsp_data, false);
+        iface.srm_list_add(
+            instance,
+            &arenas.lsp_entries,
+            level,
+            &lsp_data,
+            false,
+        );
     }
 
     // Schedule LSP refreshing.
@@ -1731,9 +1738,11 @@ pub(crate) fn lsp_originate(
     lse.refresh_timer = Some(refresh_timer);
 }
 
-
 /// Best-effort publish of LSDB counts into the passive observability hub.
-pub(crate) fn observability_publish_lsdb(instance: &InstanceUpView<'_>, level: LevelNumber) {
+pub(crate) fn observability_publish_lsdb(
+    instance: &InstanceUpView<'_>,
+    level: LevelNumber,
+) {
     let Some(obs) = instance.shared.observability.as_ref() else {
         return;
     };
