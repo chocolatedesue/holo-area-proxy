@@ -2,6 +2,19 @@
 
 Human requirement (YQH-595 / YQH-603): open a switch, run a scenario, then **only pull log files** for convergence analysis — no GetState polling loop.
 
+## Recommended source tip (YQH-613)
+
+Default entry for new labs, builds, and docs is **`main` at tip >= `4ee13d7`** (full: `4ee13d7a5c9ebfa6342c469ff0738eb4902dbc4a`, YQH-610 squash merge of passive observability). Do **not** treat `feat/yqh603-passive-observability` / `56770f6` as the default checkout after merge.
+
+```bash
+git clone https://github.com/chocolatedesue/holo-area-proxy.git
+cd holo-area-proxy
+git checkout main
+git merge-base --is-ancestor 4ee13d7a5c9ebfa6342c469ff0738eb4902dbc4a HEAD \
+  && git rev-parse --short HEAD \
+  || { echo 'FAIL: HEAD must be main@>=4ee13d7'; exit 1; }
+```
+
 ## Switch (default **off**)
 
 In `holod.toml`:
@@ -88,7 +101,7 @@ Use `tools/fib-install` patterns: set `observability.enabled=true` and `routing.
 
 ## SERNES / metrics_ndjson
 
-This feature is **source-side** (yqh1 / holo-area-proxy). SERNES images that still lack `metrics_ndjson` need a separate image rebuild once this lands on the branch they bake. Suggested follow-up: open a SERNES mirror rebuild ticket after merge.
+This feature is **source-side** on **main@>=4ee13d7** (yqh1 / holo-area-proxy). SERNES container images may still lack the export until rebuilt; that rebuild is a **separate** ticket (YQH-605). Do not pin labs to the pre-merge feature branch for source tip.
 
 ## Implementation map
 
